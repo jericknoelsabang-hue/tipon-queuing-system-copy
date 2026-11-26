@@ -47,6 +47,17 @@ input[type=file]{max-width:100%}
 .work-group h3{margin:0 0 12px;font-size:16px}
 .instructions p{margin:.45em 0 .85em}
 .arrival-instruction{text-align:center;max-width:640px;margin:18px auto 10px;color:#557992;font-weight:650}
+.queue-guidance{text-align:center;max-width:680px;margin:16px auto;color:#557992;font-weight:650}
+.queue-ready-heading{text-align:center;margin:14px 0 4px}
+.queue-badge{display:block;width:max-content;max-width:100%;margin:8px auto;padding:5px 11px;border-radius:999px;background:#e5f5fc;color:#08739c;font-size:12px;font-weight:800}
+.queue-code{display:block;text-align:center;font-size:clamp(42px,9vw,72px);line-height:1.08;letter-spacing:.02em;font-weight:850;color:#0879a4;margin:12px auto 18px;overflow-wrap:anywhere}
+.applicant-arrival{text-align:center;padding:clamp(22px,4vw,36px)}
+.applicant-arrival>h2{text-align:left}
+.applicant-arrival .appointment-date{text-align:center;margin:10px 0 16px}
+.applicant-arrival .submit-row{margin-top:14px}
+.application-approved .booking-form{max-width:100%}
+@media(max-width:520px){.applicant-arrival{padding:20px 16px}.queue-code{font-size:clamp(40px,12vw,60px)}}
+
 @media(max-width:670px){.form-row{grid-template-columns:repeat(min(var(--columns),2),minmax(0,1fr))}}
 @media(max-width:450px){.form-row{grid-template-columns:1fr}}
 label{display:grid;gap:5px;font-size:14px;font-weight:650}
@@ -231,16 +242,37 @@ function applicantGuidance(stage){
 }
 async function conversation(){
   const state=await api('read');
+  const stage=String(state.stage||'Review');
+  const files=Array.isArray(state.files)?state.files:[];
   const notices=Array.isArray(state.messages)?state.messages:[];
-  const chatBlock='<section class="chat-card"><div class="chat-heading"><h3>Conversation</h3><button class="secondary" type="button" data-refresh-chat>Refresh messages</button></div><div class="chat-thread" aria-live="polite">'+(notices.length?notices.map(message=>{const applicant=message.author==='Applicant';return '<div class="chat-bubble '+(applicant?'applicant':'recruiter')+'"><div class="chat-meta"><span>'+esc(applicant?'You':'Recruiter')+'</span><time>'+esc(message.at)+'</time></div><p>'+esc(message.text)+'</p></div>'}).join(''):'<p class="muted">No messages yet. You can message your recruiter here.</p>')+'</div><form class="chat-compose" data-action="sendApplicantMessage"><label for="applicantMessage">Your message<textarea id="applicantMessage" name="message" maxlength="2000" required placeholder="Write a message to your recruiter…"></textarea></label><button type="submit">Send message</button></form></section>';
+  if(stage==='Booked'){
+    const appointment=state.appointment?formatVisitDate(state.appointment):'';
+    root.innerHTML='<section class="applicant-arrival" aria-labelledby="applicant-queue-heading"><h2>'+esc(state.name)+'</h2>'+
+      '<span class="queue-badge">Queue number confirmed</span>'+
+      '<h3 id="applicant-queue-heading" class="queue-ready-heading">Your queue number is ready</h3>'+
+      '<strong class="queue-code">'+esc(state.number||'')+'</strong>'+
+      (appointment?'<p class="appointment-date"><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
+      '<p class="queue-guidance">Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+
+      arrivalControls(state.appointment)+'</section>';
+    return;
+  }
+  if(stage==='Arrived'){
+    const appointment=state.appointment?formatVisitDate(state.appointment):'';
+    root.innerHTML='<section class="applicant-arrival checked-in" aria-labelledby="applicant-queue-heading"><h2>'+esc(state.name)+'</h2>'+
+      '<span class="queue-badge">Checked in</span><h3 id="applicant-queue-heading" class="queue-ready-heading">Your queue number</h3>'+
+      '<strong class="queue-code">'+esc(state.number||'')+'</strong>'+
+      (appointment?'<p class="appointment-date"><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
+      '<p class="queue-guidance">You have checked in at the office. Please wait for your queue number to be called.</p></section>';
+    return;
+  }
+  const chatBlock=stage==='Review'?
+    '<section class="chat-card"><div class="chat-heading"><h3>Conversation</h3><button class="secondary" type="button" data-refresh-chat>Refresh messages</button></div><div class="chat-thread" aria-live="polite">'+(notices.length?notices.map(message=>{const applicant=message.author==='Applicant';return '<div class="chat-bubble '+(applicant?'applicant':'recruiter')+'"><div class="chat-meta"><span>'+esc(applicant?'You':'Recruiter')+'</span><time>'+esc(message.at)+'</time></div><p>'+esc(message.text)+'</p></div>'}).join(''):'<p class="muted">No messages yet. You can message your recruiter here.</p>')+'</div><form class="chat-compose" data-action="sendApplicantMessage"><label for="applicantMessage">Your message<textarea id="applicantMessage" name="message" maxlength="2000" required placeholder="Write a message to your recruiter…"></textarea></label><button type="submit">Send message</button></form></section>':'';
   let process='';
-  if(state.stage==='Ready to book')process=form('book',field('appointment','Select your office visit date *','date','required'),'Get QUEUE NUMBER');
-  if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
-  if(state.stage==='Booked')process+=arrivalControls(state.appointment);
-  if(state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
-  const stageLabel=state.stage==='Review'?'Under Review':state.stage==='Ready to book'?'Ready to Book':state.stage==='Booked'?'Booked':state.stage==='Arrived'?'Checked In':state.stage;
-  const dateText=state.appointment?formatVisitDate(state.appointment):'';
-  root.innerHTML='<section><h2>'+esc(state.name)+'</h2>'+applicantGuidance(state.stage)+'<p>'+esc(stageLabel)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(dateText?' · '+esc(dateText):'')+'</p>'+chatBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
+  if(stage==='Ready to book')process=form('book',field('appointment','Select your office visit date *','date','required'),'Get QUEUE NUMBER');
+  if(stage==='Review')process=form('upload',docs,'Upload additional documents');
+  const stageLabel=stage==='Review'?'Under Review':stage==='Ready to book'?'Ready to Book':stage;
+  root.innerHTML='<section class="'+(stage==='Ready to book'?'application-approved':'')+'"><h2>'+esc(state.name)+'</h2>'+applicantGuidance(stage)+'<p>'+esc(stageLabel)+'</p>'+chatBlock+
+    (stage==='Review'?'<p>Uploaded files</p><ul>'+files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>':'')+process+'</section>';
 }
 function formatVisitDate(value){
   const day=String(value||'').slice(0,10);
@@ -259,7 +291,7 @@ function queueConfirmation(ticket){
   root.innerHTML='<section class="queue-confirmation" aria-labelledby="queue-ready-heading"><span class="queue-badge">Queue number confirmed</span>'+
     '<h2 id="queue-ready-heading" tabindex="-1">Your queue number is ready</h2><strong class="queue-code">'+esc(ticket.number)+'</strong>'+
     (appointment?'<p><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
-    '<p>On your selected office visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+arrivalControls(ticket.appointment)+
+    '<p class="queue-guidance">Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+arrivalControls(ticket.appointment)+
     '<div class="queue-actions"><a class="queue-action" href="online.html">Register Another Applicant</a><button type="button" data-queue-done>Done</button></div></section>';
   root.querySelector('#queue-ready-heading').focus();
 }
