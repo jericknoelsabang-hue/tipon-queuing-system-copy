@@ -37,7 +37,7 @@ small{font-weight:400}
 </head>
 <body><header>tipón · TAWAG</header>
 <main class="staff"><h1>Online Queue</h1><p><a href="./?view=staff">Back to Staff Console</a></p><p id="signIn" hidden><a id="directLogin" target="_blank" rel="noopener">Open the TIPON Workspace sign-in</a> for direct access if the connection is blocked.</p><p id="notice" role="status"></p><p><button id="connectWorkspace" type="button">Connect TIPON Workspace</button></p><div id="screen"></div></main>
-<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=4" data-mode="staff"></script><script src="online-chat.js?v=1"></script>
+<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=5" data-mode="staff"></script><script src="online-chat.js?v=1"></script>
 <script>
 const root=document.getElementById('screen'),notice=document.getElementById('notice');
 let selected='',running=false;
@@ -48,14 +48,14 @@ const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'
 const download=(file)=>'<button type="button" data-file="'+esc(file.id)+'">'+esc(file.name)+'</button>';
 async function staff(){
   const [list,onsite]=await Promise.all([api('list'),api('onsiteLink')]);
-  root.innerHTML='<section><div class="actions"><button type="button" data-refresh>Refresh</button><a href="'+esc(onsite)+'">Office check-in link for onsite QR</a></div><div class="scroll"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Action</th><th>Uploaded files</th></tr></thead><tbody>'+list.map(row=>'<tr><td>'+esc(row.date?new Date(row.date).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}):'')+'</td><td>'+esc(row.number||'—')+'<br><small>'+esc(row.appointment?row.appointment.replace('T',' ')+' PHT':row.stage)+'</small></td><td>'+esc(row.name)+'</td><td>'+transaction(row.transaction)+'</td><td><div class="actions"><button type="button" data-complete="'+esc(row.id)+'" '+(row.stage==='Review'?'':'disabled')+'>Complete</button><button type="button" data-chat="'+esc(row.id)+'">Message</button></div></td><td><div class="actions">'+row.files.map(file=>'<button type="button" data-file="'+esc(file.id)+'" data-case="'+esc(row.id)+'">'+esc(file.name)+'</button>').join('')+'</div></td></tr>').join('')+(list.length?'':'<tr><td colspan="6">No online applications yet.</td></tr>')+'</tbody></table></div></section>';
+  root.innerHTML='<section><div class="actions"><button type="button" data-refresh>Refresh</button><a href="'+esc(onsite)+'">Office check-in link for onsite QR</a></div><div class="scroll"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Action</th><th>Uploaded files</th></tr></thead><tbody>'+list.map(row=>'<tr><td>'+esc(row.date?new Date(row.date).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}):'')+'</td><td>'+esc(row.number||'—')+'<br><small>'+esc(row.stage==='Arrived'?'Arrived at office':row.stage)+(row.appointment?'<br>'+esc(row.appointment.replace('T',' ')+' PHT'):'')+'</small></td><td>'+esc(row.name)+'</td><td>'+transaction(row.transaction)+'</td><td><div class="actions"><button type="button" data-complete="'+esc(row.id)+'" '+(row.stage==='Review'?'':'disabled')+'>Complete</button><button type="button" data-chat="'+esc(row.id)+'">'+(row.number?'View':'Message')+'</button></div></td><td><div class="actions">'+row.files.map(file=>'<button type="button" data-file="'+esc(file.id)+'" data-case="'+esc(row.id)+'">'+esc(file.name)+'</button>').join('')+'</div></td></tr>').join('')+(list.length?'':'<tr><td colspan="6">No online applications yet.</td></tr>')+'</tbody></table></div></section>';
 }
 async function conversation(){
   const state=await api('readStaff');
   const draft=onlineChat.draft(root);
   const controls='<button type="button" data-back>Back to Online Queue</button>';
   const profile='<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(value)+'</dd>').join('')+'</dl></details>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+download(f)+'</li>').join('')+'</ul>'+'</section>'+onlineChat.markup(state.messages,'Recruiter','staffChat',draft);
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+download(f)+'</li>').join('')+'</ul>'+'</section>'+(state.number?'':onlineChat.markup(state.messages,'Recruiter','staffChat',draft));
   onlineChat.scroll(root);
 }
 
@@ -63,7 +63,7 @@ const render=()=>selected?conversation():staff();
 async function run(task){
   if(running)return;
   running=true;root.inert=true;notice.textContent='Loading Online Queue…';
-  try{await task();notice.textContent='';document.getElementById('signIn').hidden=true;}
+  try{await task();notice.textContent='';document.getElementById('signIn').hidden=true;window.focus();}
   catch(error){
     notice.textContent=error.message||String(error);
     if(!bridgeWindow||/authorized|sign in|timed out/i.test(notice.textContent)){

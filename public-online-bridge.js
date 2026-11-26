@@ -27,7 +27,7 @@ function startBridgeDeadline(){
   bridgeDeadline=setTimeout(()=>rejectBridge(Error('Online Queue connection timed out. Reload this page to retry.')),45000);
 }
 function openWorkspaceConnection(){
-  const popup=window.open(onlineBackend.href,'tipon-workspace-queue','popup,width=580,height=500');
+  const popup=window.open(onlineBackend.href,'tipon-workspace-queue','popup,width=420,height=280');
   if(popup)startBridgeDeadline();
   return Boolean(popup);
 }

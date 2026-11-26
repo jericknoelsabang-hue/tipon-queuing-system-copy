@@ -174,13 +174,21 @@ async function conversation(){
   const state=await api('read');
   const draft=onlineChat.draft(root);
   const controls=
-    '<p>Save <a href="'+esc(new URL('online.html?case='+token,location.href).href)+'">your private application link</a> to return to the chat.</p>';
+    '<p>Save <a href="'+esc(new URL('online.html?case='+token,location.href).href)+'">your private application link</a> to check your application status.</p>';
   let process='';
   if(state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
   if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
-  if(state.stage==='Booked')process+='<p>On your appointment date, scan the QR displayed at the office to join the active queue.</p>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>' + '<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>'+onlineChat.markup(state.messages,'Applicant','chat',draft);
+  if(state.stage==='Booked')process+=arrivalControls(state.appointment);
+  if(state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Please wait for your queue number to be called.</p>';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>' + '<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>'+(state.number?'':onlineChat.markup(state.messages,'Applicant','chat',draft));
   onlineChat.scroll(root);
+}
+function arrivalControls(appointment){
+  const date=appointment?.slice(0,10);
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
+  const today=[parts.year,parts.month,parts.day].join('-');
+  return '<p>When you reach the office on your appointment date, confirm your arrival.</p>'+
+    '<form data-action="confirmArrival"><button'+(date===today?'':' disabled')+'>Nandito na ako sa office</button></form>';
 }
 function queueConfirmation(ticket){
   const privateLink=new URL('online.html?case='+token,location.href).href;
@@ -189,7 +197,7 @@ function queueConfirmation(ticket){
   root.innerHTML='<section class="queue-confirmation" aria-labelledby="queue-ready-heading"><span class="queue-badge">Queue number confirmed</span>'+
     '<h2 id="queue-ready-heading" tabindex="-1">Your queue number is ready</h2><strong class="queue-code">'+esc(ticket.number)+'</strong>'+
     (appointment?'<p><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
-    '<p>Save your queue number and <a href="'+esc(privateLink)+'">private application link</a>. Scan the office QR on your appointment date to join the active queue.</p>'+
+    '<p>Save your queue number and <a href="'+esc(privateLink)+'">private application link</a>. Confirm your arrival when you reach the office.</p>'+arrivalControls(ticket.appointment)+
     '<div class="queue-actions"><a class="queue-action" href="online.html">Register Another Applicant</a><button type="button" data-queue-done>Done</button></div></section>';
   root.querySelector('#queue-ready-heading').focus();
 }
@@ -252,11 +260,14 @@ root.addEventListener('submit',e=>{
     else if(action==='arrive'){
       token=new URL(data.get('link')).searchParams.get('case')||'';
       const result=await api('arrive');root.innerHTML='<section><h2>Checked in</h2><p>Your queue number is <strong>'+esc(result.number)+'</strong>.</p></section>';return;
+    }else if(action==='confirmArrival'){
+      await api('confirmArrival');
+      confirmedTicket=null;
     }else if(action==='book'){
       const appointment=String(data.get('appointment')||'');
       const result=await api('book',{appointment});
       if(!result?.number)throw Error('The queue number could not be confirmed. Please check your application and try again.');
-      confirmedTicket={number:result.number,appointment};
+      confirmedTicket={number:result.number,appointment:result.appointment||appointment};
       queueConfirmation(confirmedTicket);
       return;
     }else{

@@ -78,7 +78,7 @@ function onlineQueue(action, input) {
   if (action==='fields') return onlineFields_();
   const staffActions=['list','complete','staffChat','readStaff','onsiteLink','download'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','chat','complete','staffChat','book','arrive'];
+  const mutations=['submit','upload','chat','complete','staffChat','book','arrive','confirmArrival'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -149,6 +149,7 @@ function onlineOperate_(action,d,staff) {
       messages:onlineRead_(messages).filter(m=>m[0]===id).map(m=>({author:m[1],text:m[2],at:m[3]}))};
   }
   if(action==='chat'||action==='staffChat'){
+    if(row[9]||stage==='Booked'||stage==='Arrived')throw Error('Chat is closed after a queue number is issued.');
     const message=onlineText_(d.message,2000);
     if(!message) throw Error('Enter a message.');
     onlineWrite_(messages,[id,staff?'Recruiter':'Applicant',message,now.toISOString()]);
@@ -160,7 +161,7 @@ function onlineOperate_(action,d,staff) {
   } else if(action==='complete'){
     if(stage==='Review')update('Ready to book');
   } else if(action==='book'){
-    if(stage==='Booked'||stage==='Arrived')return {number:row[9]};
+    if(stage==='Booked'||stage==='Arrived')return {number:row[9],appointment:row[7]};
     if(stage!=='Ready to book')throw Error('Wait for the recruiter to complete document review.');
     const appointment=onlineText_(d.appointment,16);
     const date=new Date(appointment+':00+08:00');
@@ -169,11 +170,11 @@ function onlineOperate_(action,d,staff) {
     const sequence=all.reduce((max,app)=>Math.max(max,Number(app[8])||0),0)+1;
     const number='OL'+row[3]+'-'+String(sequence).padStart(6,'0');
     update('Booked',appointment,sequence,number);
-    return {number};
-  } else if(action==='arrive'){
+    return {number,appointment};
+  } else if(action==='arrive'||action==='confirmArrival'){
     if(stage==='Arrived')return {number:row[9]};
-    if(stage!=='Booked'||row[7].slice(0,10)!==today||!props.getProperty('ONLINE_ONSITE_KEY')||d.site!==props.getProperty('ONLINE_ONSITE_KEY'))
-      throw Error('Scan the office QR on your scheduled date.');
+    if(stage!=='Booked'||row[7].slice(0,10)!==today)throw Error('Check in on your scheduled appointment date.');
+    if(action==='arrive'&&(!props.getProperty('ONLINE_ONSITE_KEY')||d.site!==props.getProperty('ONLINE_ONSITE_KEY')))throw Error('Scan the office QR to confirm arrival.');
     const queueId=props.getProperty('QUEUE_SPREADSHEET_ID');
     if(!queueId||queueId===CFG.spreadsheetId)throw Error('The duplicate office queue is unavailable.');
     const ss=ss_(), active=ss.getSheetByName(CFG.queue), tx=findTx_(ss,row[3]);
@@ -208,11 +209,15 @@ function onlineFiles_(props, input) {
 
 function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
-  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><p>Keep this Google Workspace tab open while using the TIPON Online Queue.</p><script>
+  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><style>body{font:16px system-ui;padding:20px;color:#093952;background:#eef6fa}button{padding:10px;color:white;background:#0879a4;border:0;border-radius:8px;cursor:pointer}</style><h2>TIPON Workspace connection</h2><p>Keep this window open while using Online Queue.</p><button id="returnToQueue" hidden>Return to Online Queue</button><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','staffChat','readStaff','onsiteLink','download']:['fields','submit','read','upload','chat','book','arrive'])};
+    const allowed=${JSON.stringify(staff?['list','complete','staffChat','readStaff','onsiteLink','download']:['fields','submit','read','upload','chat','book','arrive','confirmArrival'])};
     const pages=${staff?'window.top.opener':'window.top!==window?window.top:null'};
     if(pages){
+      if(${JSON.stringify(staff)}){
+        const back=document.getElementById('returnToQueue');
+        back.hidden=false;back.onclick=()=>pages.focus();
+      }
       window.addEventListener('message',event=>{
         const data=event.data;
         if(event.origin!==origin||event.source!==pages||data?.type!=='tipon-online-request'||data.channel!==channel||!allowed.includes(data.action))return;
