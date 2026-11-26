@@ -12,6 +12,9 @@ function initializeOnlineQueue() {
     store.insertSheet('Documents').appendRow(['Application','File ID','Filename']);
     props.setProperty('ONLINE_STORE', store.getId());
   }
+  const storeBook=SpreadsheetApp.openById(props.getProperty('ONLINE_STORE'));
+  const messageSheet=storeBook.getSheetByName('Messages')||storeBook.insertSheet('Messages');
+  if(messageSheet.getLastRow()===0)messageSheet.appendRow(['Application','Author','Message','Sent at']);
   if (!props.getProperty('ONLINE_FOLDER')) props.setProperty('ONLINE_FOLDER', DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
   if (!props.getProperty('ONLINE_ONSITE_KEY')) props.setProperty('ONLINE_ONSITE_KEY', onlineToken_());
   onlineFields_();
@@ -78,10 +81,10 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  if(action==='chat'||action==='staffChat') throw Error('Messaging is disabled for Online Recruitment.');
-  const staffActions=['list','complete','readStaff','onsiteLink','download'];
+  if(action==='chat'||action==='staffChat') throw Error('Applicant chat and replies are disabled.');
+  const staffActions=['list','complete','readStaff','onsiteLink','download','sendMessage'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','complete','book','arrive','confirmArrival'];
+  const mutations=['submit','upload','complete','book','arrive','confirmArrival','sendMessage'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -93,6 +96,8 @@ function onlineOperate_(action,d,staff) {
   if(!storeId) throw Error('Online Queue has not been configured.');
   const data=SpreadsheetApp.openById(storeId), apps=data.getSheetByName('Applications');
   const files=data.getSheetByName('Documents');
+  const messages=data.getSheetByName('Messages')||data.insertSheet('Messages');
+  if(messages.getLastRow()===0)messages.appendRow(['Application','Author','Message','Sent at']);
   const all=onlineRead_(apps), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
@@ -149,6 +154,13 @@ function onlineOperate_(action,d,staff) {
     saveOnlineApplicantAnswers_(props,updated);
     return updated;
   };
+  if(action==='sendMessage'){
+    if(!staff)throw Error('Only authorized recruiters can send applicant messages.');
+    const message=onlineText_(d.message,2000);
+    if(!message)throw Error('Enter a message before sending.');
+    onlineWrite_(messages,[id,staff,message,now.toISOString()]);
+    return {ok:true};
+  }
   if(action==='download'){
     const file=fileList(id).find(doc=>doc[1]===d.file);
     if(!file)throw Error('Document unavailable.');
@@ -156,8 +168,9 @@ function onlineOperate_(action,d,staff) {
     return {name:file[2],mime:blob.getContentType(),data:Utilities.base64Encode(blob.getBytes())};
   }
   if(action==='readStaff'||action==='read'){
+    const notices=onlineRead_(messages).filter(message=>String(message[0])===String(id)).map(message=>({author:'Recruiter',text:message[2],at:message[3]}));
     return {name:row[4],stage,appointment:row[7],number:row[9],url,today,
-      answers:staff?JSON.parse(row[5]):null,files:fileList(id).map(f=>({name:f[2],id:staff?f[1]:''}))};
+      answers:staff?JSON.parse(row[5]):null,files:fileList(id).map(f=>({name:f[2],id:staff?f[1]:''})),messages:notices};
   }
   if(action==='upload'){
     if(stage!=='Review') throw Error('Documents can be added while requirements are under review.');
@@ -217,7 +230,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','readStaff','onsiteLink','download']:['fields','submit','read','upload','book','arrive','confirmArrival'])};
+    const allowed=${JSON.stringify(staff?['list','complete','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival'])};
     const pages=window.top!==window?window.top:window.opener;
     if(pages){
       window.addEventListener('message',event=>{
