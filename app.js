@@ -568,6 +568,10 @@ async function refresh(silent=false){
        };
     hasLoaded=true;
     render();
+    // A timed-out write can still have completed on Apps Script. Clear its warning
+    // only after a fresh state response has rendered the authoritative queue state.
+    const staffAlert=$('staffAlert');
+    if(page==='staff'&&staffAlert?.textContent.includes('did not confirm in time'))clearStaffMessage();
     if(!COMPATIBLE.has(S.version))
       status('Backend version is outdated. Check the Apps Script deployment.','err');
     else if(S.version!==REQUIRED)
