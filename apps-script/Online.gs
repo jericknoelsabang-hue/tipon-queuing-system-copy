@@ -3,8 +3,8 @@ const ONLINE_HEADERS = ['ID','Token digest','Submitted at','Transaction','Name',
 
 function initializeOnlineQueue() {
   const props = PropertiesService.getScriptProperties();
-  const queueId=props.getProperty('QUEUE_SPREADSHEET_ID');
-  if(!queueId||queueId===CFG.spreadsheetId) throw Error('Configure a separate QUEUE_SPREADSHEET_ID before initializing the online queue.');
+  const queue = ss_();
+  if(queue.getId()!==CFG.spreadsheetId) throw Error('The TIPON TAWAG Copy database is unavailable.');
   if (!props.getProperty('ONLINE_STORE')) {
     const store = SpreadsheetApp.create('TIPON TAWAG Online Recruitment');
     store.getSheets()[0].setName('Applications').appendRow(ONLINE_HEADERS);
@@ -15,6 +15,7 @@ function initializeOnlineQueue() {
   if (!props.getProperty('ONLINE_FOLDER')) props.setProperty('ONLINE_FOLDER', DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
   if (!props.getProperty('ONLINE_ONSITE_KEY')) props.setProperty('ONLINE_ONSITE_KEY', onlineToken_());
   onlineFields_();
+  onlineAnswersSheet_(props);
 }
 
 function onlineToken_() {
@@ -76,9 +77,10 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  const staffActions=['list','complete','staffChat','readStaff','onsiteLink','download'];
+  if(action==='chat'||action==='staffChat') throw Error('Messaging is disabled for Online Recruitment.');
+  const staffActions=['list','complete','readStaff','onsiteLink','download'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','chat','complete','staffChat','book','arrive','confirmArrival'];
+  const mutations=['submit','upload','complete','book','arrive','confirmArrival'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -89,7 +91,7 @@ function onlineOperate_(action,d,staff) {
   const props=PropertiesService.getScriptProperties(), storeId=props.getProperty('ONLINE_STORE');
   if(!storeId) throw Error('Online Queue has not been configured.');
   const data=SpreadsheetApp.openById(storeId), apps=data.getSheetByName('Applications');
-  const messages=data.getSheetByName('Messages'), files=data.getSheetByName('Documents');
+  const files=data.getSheetByName('Documents');
   const all=onlineRead_(apps), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
@@ -140,8 +142,12 @@ function onlineOperate_(action,d,staff) {
   const idx=staff?all.findIndex(row=>row[0]===d.id):(/^[a-f0-9]{64}$/.test(String(d.token||''))?all.findIndex(row=>row[1]===onlineDigest_(d.token)):-1);
   if(idx<0) throw Error('Application link unavailable.');
   const row=all[idx], id=row[0], stage=row[6];
-  const update=(next,appointment=row[7],sequence=row[8],number=row[9])=>
+  const update=(next,appointment=row[7],sequence=row[8],number=row[9])=>{
     apps.getRange(idx+2,7,1,4).setValues([[next,appointment,sequence,number].map(value=>"'"+String(value))]);
+    const updated=apps.getRange(idx+2,1,1,ONLINE_HEADERS.length).getValues()[0];
+    saveOnlineApplicantAnswers_(props,updated);
+    return updated;
+  };
   if(action==='download'){
     const file=fileList(id).find(doc=>doc[1]===d.file);
     if(!file)throw Error('Document unavailable.');
@@ -149,20 +155,15 @@ function onlineOperate_(action,d,staff) {
     return {name:file[2],mime:blob.getContentType(),data:Utilities.base64Encode(blob.getBytes())};
   }
   if(action==='readStaff'||action==='read'){
-    return {name:row[4],stage,appointment:row[7],number:row[9],url, today,
-      answers:staff?JSON.parse(row[5]):null,files:fileList(id).map(f=>({name:f[2],id:staff?f[1]:''})),
-      messages:onlineRead_(messages).filter(m=>m[0]===id).map(m=>({author:m[1],text:m[2],at:m[3]}))};
+    return {name:row[4],stage,appointment:row[7],number:row[9],url,today,
+      answers:staff?JSON.parse(row[5]):null,files:fileList(id).map(f=>({name:f[2],id:staff?f[1]:''}))};
   }
-  if(action==='chat'||action==='staffChat'){
-    if(row[9]||stage==='Booked'||stage==='Arrived')throw Error('Chat is closed after a queue number is issued.');
-    const message=onlineText_(d.message,2000);
-    if(!message) throw Error('Enter a message.');
-    onlineWrite_(messages,[id,staff?'Recruiter':'Applicant',message,now.toISOString()]);
-  } else if(action==='upload'){
+  if(action==='upload'){
     if(stage!=='Review') throw Error('Documents can be added while requirements are under review.');
     const incoming=Array.isArray(d.files)?d.files:[];
     if(!incoming.length||fileList(id).length+incoming.length>10) throw Error('Upload up to 10 documents total.');
     for(const file of onlineFiles_(props,incoming)) onlineWrite_(files,[id,file.getId(),file.getName()]);
+    saveOnlineApplicantAnswers_(props,apps.getRange(idx+2,1,1,ONLINE_HEADERS.length).getValues()[0]);
   } else if(action==='complete'){
     if(stage==='Review')update('Ready to book');
   } else if(action==='book'){
@@ -180,9 +181,8 @@ function onlineOperate_(action,d,staff) {
     if(stage==='Arrived')return {number:row[9]};
     if(stage!=='Booked'||row[7].slice(0,10)!==today)throw Error('Check in on your scheduled appointment date.');
     if(action==='arrive'&&(!props.getProperty('ONLINE_ONSITE_KEY')||d.site!==props.getProperty('ONLINE_ONSITE_KEY')))throw Error('Scan the office QR to confirm arrival.');
-    const queueId=props.getProperty('QUEUE_SPREADSHEET_ID');
-    if(!queueId||queueId===CFG.spreadsheetId)throw Error('The duplicate office queue is unavailable.');
     const ss=ss_(), active=ss.getSheetByName(CFG.queue), tx=findTx_(ss,row[3]);
+    if(!active)throw Error('The TIPON TAWAG Copy queue sheet is unavailable.');
     if(!tx)throw Error('This transaction is not active in the office queue.');
     if(!active.getRange(1,1,active.getLastRow(),1).createTextFinder(id).matchEntireCell(true).findNext()){
       const entry=[id,today,now,row[9],row[3],tx.name,"'"+row[4],"Online recruitment",'WAITING','','','','','','','','','','',''];
@@ -216,7 +216,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><style>body{font:16px system-ui;padding:20px;color:#093952;background:#eef6fa}button{padding:10px;color:white;background:#0879a4;border:0;border-radius:8px;cursor:pointer}</style><h2>TIPON Workspace connection</h2><p>Keep this window open while using Online Queue.</p><button id="returnToQueue" hidden>Return to Online Queue</button><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','staffChat','readStaff','onsiteLink','download']:['fields','submit','read','upload','chat','book','arrive','confirmArrival'])};
+    const allowed=${JSON.stringify(staff?['list','complete','readStaff','onsiteLink','download']:['fields','submit','read','upload','book','arrive','confirmArrival'])};
     const pages=${staff?'window.top.opener':'window.top!==window?window.top:null'};
     if(pages){
       if(${JSON.stringify(staff)}){
@@ -237,18 +237,31 @@ function onlineBridge_(channel, staff) {
 }
 
 function onlineAnswersSheet_(props) {
-  const id=props.getProperty('QUEUE_SPREADSHEET_ID');
-  if(!id||id===CFG.spreadsheetId)throw Error('The separate queue database is unavailable.');
-  if(DriveApp.getFileById(id).getSharingAccess()!==DriveApp.Access.PRIVATE)
+  const id=CFG.spreadsheetId;
+  const access=DriveApp.getFileById(id).getSharingAccess();
+  if(access===DriveApp.Access.ANYONE||access===DriveApp.Access.ANYONE_WITH_LINK)
     throw Error('The applicant database must use restricted sharing.');
-  const book=SpreadsheetApp.openById(id);
+  const book=ss_();
   return book.getSheetByName('ONLINE_APPLICATIONS')||book.insertSheet('ONLINE_APPLICATIONS');
 }
 
 function saveOnlineApplicantAnswers_(props, row, destination) {
   const sheet=destination||onlineAnswersSheet_(props);
-  const profile=JSON.parse(row[5]);
-  const metadata={'Application ID':row[0],'Submitted at (UTC)':row[2],'Recruitment Transaction':row[3]==='NH'?'New Hire':'Rehire','Applicant Name':row[4]};
+  const profile=JSON.parse(row[5]||'{}');
+  const storeId=props.getProperty('ONLINE_STORE');
+  const documentsSheet=storeId?SpreadsheetApp.openById(storeId).getSheetByName('Documents'):null;
+  const documents=documentsSheet?onlineRead_(documentsSheet).filter(file=>String(file[0])===String(row[0])):[];
+  const metadata={
+    'Application ID':row[0],
+    'Submitted at (UTC)':row[2],
+    'Recruitment Transaction':row[3]==='NH'?'New Hire':'Rehire',
+    'Applicant Name':row[4],
+    'Application Status':row[6]||'',
+    'Appointment (PHT)':row[7]||'',
+    'Queue Number':row[9]||'',
+    'Uploaded File Names':documents.map(file=>file[2]).join('\\n'),
+    'Uploaded File Links':documents.map(file=>'https://drive.google.com/file/d/'+file[1]+'/view').join('\\n')
+  };
   const answers={...metadata,...profile};
   const previous=sheet.getLastRow()?sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0]:[];
   const headers=[...new Set([...previous,...Object.keys(answers)])];
