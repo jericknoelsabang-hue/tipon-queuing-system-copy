@@ -35,8 +35,8 @@ small{font-weight:400}
 </style>
 </head>
 <body><header>tipón · TAWAG</header>
-<main class="staff"><h1>Online Queue</h1><p><a href="./?view=staff">Back to Staff Console</a></p><p id="signIn" hidden><a id="directLogin" target="_blank" rel="noopener">Open the TIPON Workspace sign-in</a> and reload this page.</p><p id="notice" role="status">Loading…</p><div id="screen"></div></main>
-<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=3" data-mode="staff"></script><script>
+<main class="staff"><h1>Online Queue</h1><p><a href="./?view=staff">Back to Staff Console</a></p><p id="signIn" hidden><a id="directLogin" target="_blank" rel="noopener">Open the TIPON Workspace sign-in</a> for direct access if the connection is blocked.</p><p id="notice" role="status"></p><p><button id="connectWorkspace" type="button">Connect TIPON Workspace</button></p><div id="screen"></div></main>
+<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=4" data-mode="staff"></script><script>
 const root=document.getElementById('screen'),notice=document.getElementById('notice');
 let selected='',running=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -92,5 +92,12 @@ root.addEventListener('click',e=>{
   });
 });
 
-run(render);
+document.getElementById('connectWorkspace').addEventListener('click',event=>{
+  if(!openWorkspaceConnection()){
+    notice.textContent='Allow the Google Workspace pop-up, then try again.';
+    return;
+  }
+  event.currentTarget.disabled=true;
+  run(render);
+});
 </script></body></html>

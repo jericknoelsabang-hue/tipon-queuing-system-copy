@@ -208,18 +208,20 @@ function onlineFiles_(props, input) {
 
 function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
-  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><script>
+  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><p>Keep this Google Workspace tab open while using the TIPON Online Queue.</p><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
     const allowed=${JSON.stringify(staff?['list','complete','staffChat','readStaff','onsiteLink','download']:['fields','submit','read','upload','chat','book','arrive'])};
-    if(window.top!==window){
+    const pages=${staff?'window.top.opener':'window.top!==window?window.top:null'};
+    if(pages){
       window.addEventListener('message',event=>{
         const data=event.data;
-        if(event.origin!==origin||event.source!==window.top||data?.type!=='tipon-online-request'||data.channel!==channel||!allowed.includes(data.action))return;
-        const reply=result=>window.top.postMessage({type:'tipon-online-result',channel,id:data.id,...result},origin);
+        if(event.origin!==origin||event.source!==pages||data?.type!=='tipon-online-request'||data.channel!==channel||!allowed.includes(data.action))return;
+        const reply=result=>pages.postMessage({type:'tipon-online-result',channel,id:data.id,...result},origin);
         google.script.run.withSuccessHandler(result=>reply({result})).withFailureHandler(error=>reply({error:error.message})).onlineQueue(data.action,data.input);
       });
-      window.top.postMessage({type:'tipon-online-ready',channel},origin);
+      pages.postMessage({type:'tipon-online-ready',channel},origin);
     }
   </script>`;
-  return HtmlService.createHtmlOutput(html).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  const page=HtmlService.createHtmlOutput(html);
+  return staff?page:page.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

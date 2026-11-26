@@ -8,7 +8,7 @@ let bridgeWindow, bridgeSourceOrigin, acceptBridge, rejectBridge;
 const bridgeReady=new Promise((resolve,reject)=>{acceptBridge=resolve;rejectBridge=reject;});
 // Rendering the form no longer waits for this connection. A later submission still needs it.
 bridgeReady.catch(()=>{});
-const bridgeDeadline=setTimeout(()=>rejectBridge(Error('Online Queue connection timed out. Reload this page to retry.')),30000);
+let bridgeDeadline;
 window.addEventListener('message',event=>{
   const data=event.data;
   if(!data||data.channel!==bridgeChannel||!/^https:\/\/(?:script\.google\.com|[a-z0-9-]+-script\.googleusercontent\.com|script\.googleusercontent\.com)$/.test(event.origin))return;
@@ -21,12 +21,23 @@ window.addEventListener('message',event=>{
   pendingOnline.delete(data.id);clearTimeout(request.timer);
   if(data.error)request.reject(Error(data.error));else request.resolve(data.result);
 });
-const onlineFrame=document.createElement('iframe');
-onlineFrame.hidden=true;onlineFrame.title='TIPON Online Queue connection';
 onlineBackend.searchParams.set('online',staffBridge?'staff-bridge':'bridge');
 onlineBackend.searchParams.set('channel',bridgeChannel);
-onlineFrame.src=onlineBackend.href;
-document.body.append(onlineFrame);
+function startBridgeDeadline(){
+  bridgeDeadline=setTimeout(()=>rejectBridge(Error('Online Queue connection timed out. Reload this page to retry.')),45000);
+}
+function openWorkspaceConnection(){
+  const popup=window.open(onlineBackend.href,'tipon-workspace-queue','popup,width=580,height=500');
+  if(popup)startBridgeDeadline();
+  return Boolean(popup);
+}
+if(!staffBridge){
+  const onlineFrame=document.createElement('iframe');
+  onlineFrame.hidden=true;onlineFrame.title='TIPON Online Queue connection';
+  onlineFrame.src=onlineBackend.href;
+  document.body.append(onlineFrame);
+  startBridgeDeadline();
+}
 async function onlineRequest(action,input){
   await bridgeReady;
   return new Promise((resolve,reject)=>{
