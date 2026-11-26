@@ -372,9 +372,16 @@ function onlineOperate_(action,d,staff) {
   const update=(next,appointment=row[7],sequence=row[8],number=row[9])=>{
     apps.getRange(idx+2,4,1,3).setValues([[row[3],row[4],row[5]].map(value=>"'"+String(value))]);
     apps.getRange(idx+2,7,1,4).setValues([[next,appointment,sequence,number].map(value=>"'"+String(value))]);
-    const updated=apps.getRange(idx+2,1,1,ONLINE_HEADERS.length).getValues()[0];
-    saveOnlineApplicantAnswers_(props,updated);
-    return updated;
+    try {
+      const updated=apps.getRange(idx+2,1,1,ONLINE_HEADERS.length).getValues()[0];
+      saveOnlineApplicantAnswers_(props,updated);
+      return updated;
+    } catch(error) {
+      // Keep the authoritative application record and its mirrored sheet in sync on failed writes.
+      apps.getRange(idx+2,7,1,4).setValues([[row[6],row[7],row[8],row[9]].map(value=>"'"+String(value))]);
+      SpreadsheetApp.flush();
+      throw error;
+    }
   };
   if(action==='deleteApplication'){
     if(!staff)throw Error('Only authorized recruiters can remove applications.');
@@ -412,10 +419,10 @@ function onlineOperate_(action,d,staff) {
   } else if(action==='book'){
     if(stage==='Booked'||stage==='Arrived')return {number:row[9],appointment:row[7]};
     if(stage!=='Ready to book')throw Error('Wait for the recruiter to complete document review.');
-    const appointment=onlineText_(d.appointment,16);
-    const date=new Date(appointment+':00+08:00');
-    if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(appointment)||!Number.isFinite(date.getTime())||date<=now||
-        Utilities.formatDate(date,'Asia/Manila',"yyyy-MM-dd'T'HH:mm")!==appointment) throw Error('Choose a future appointment in Philippine time.');
+    const appointment=onlineText_(d.appointment,10);
+    const date=new Date(appointment+'T00:00:00+08:00');
+    const validDate=Number.isFinite(date.getTime())&&Utilities.formatDate(date,'Asia/Manila','yyyy-MM-dd')===appointment;
+    if(!/^\d{4}-\d\d-\d\d$/.test(appointment)||!validDate||appointment<today) throw Error('Choose a valid office visit date that is today or later.');
     const sequence=all.reduce((max,app)=>Math.max(max,Number(app[8])||0),0)+1;
     const number='OL'+row[3]+'-'+String(sequence).padStart(6,'0');
     update('Booked',appointment,sequence,number);
