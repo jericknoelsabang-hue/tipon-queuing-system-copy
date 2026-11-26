@@ -30,6 +30,9 @@ th{background:#eef6fa}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 #notice{color:#8c2a25}
 small{font-weight:400}
+.field-invalid input:not([type=checkbox]),.field-invalid select,.field-invalid textarea{border-color:#d93025!important;background:#fff7f6!important;box-shadow:0 0 0 1px #d93025}
+.field-invalid .choice input[type=checkbox]{outline:2px solid #d93025;outline-offset:2px}
+.field-invalid>span:first-child,.field-invalid>strong{color:#b3261e}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -42,7 +45,7 @@ let token=init.token, selected='', fields=[], running=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=(action,data={})=>new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).onlineQueue(action,{token,id:selected,site:init.site,...data}));
 const transaction=value=>value==='NH'?'New Hire':'Rehire';
-const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p><button>'+label+'</button></p></form>';
+const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+'>'+contents+'<p><button type="submit">'+label+'</button></p></form>';
 const field=(name,label,type='text',attrs='')=>'<label>'+label+'<input name="'+name+'" type="'+type+'" '+attrs+'></label>';
 const docs='<label>Upload Pre-Requirements Documents (PDF or JPEG) *<input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
 const filesToData=async files=>{
@@ -60,9 +63,54 @@ function question(q){
   if(q.type==='CHECKBOX')return '<div class="question" data-id="'+q.id+'"><strong>'+title+'</strong>'+help+q.choices.map(c=>'<label class="choice"><input type="checkbox" name="'+name+'" value="'+esc(c)+'">'+esc(c)+'</label>').join('')+(q.other?field(name,'Other'):'')+'</div>';
   let control;
   if(q.choices.length)control='<select name="'+name+'"'+required+'><option value="">Select an option</option>'+q.choices.map(c=>'<option>'+esc(c)+'</option>').join('')+(q.other?'<option value="__other">Other</option>':'')+'</select>'+(q.other?'<input name="'+name+'Other" placeholder="Specify other" hidden>':'');
+  else if(q.title==='Email / Gmail Address')control='<input name="'+name+'" type="email" maxlength="254"'+required+'>';
   else if(q.type==='PARAGRAPH_TEXT')control='<textarea name="'+name+'" maxlength="1500"'+required+'></textarea>';
   else control='<input name="'+name+'" type="'+({DATE:'date',DATETIME:'datetime-local',TIME:'time'}[q.type]||'text')+'" maxlength="1500"'+required+'>';
   return '<label class="question" data-id="'+q.id+'">'+title+help+control+'</label>';
+}
+function validateApplication(form){
+  form.querySelectorAll('.field-invalid').forEach(node=>node.classList.remove('field-invalid'));
+  form.querySelectorAll('[aria-invalid="true"]').forEach(node=>node.removeAttribute('aria-invalid'));
+  const invalid=[];
+  for(const control of Array.from(form.querySelectorAll('input,select,textarea')).filter(node=>!node.disabled)){
+    if(!control.validity.valid){
+      const wrapper=control.closest('.question')||control.closest('label')||control.parentElement;
+      wrapper?.classList.add('field-invalid');
+      control.setAttribute('aria-invalid','true');
+      invalid.push({wrapper,control});
+    }
+  }
+  for(const question of fields.filter(item=>item.required&&item.type==='CHECKBOX')){
+    const wrapper=form.querySelector('[data-id="'+question.id+'"]');
+    if(wrapper&&!wrapper.querySelector('input[type="checkbox"]:checked')){
+      wrapper.classList.add('field-invalid');
+      const control=wrapper.querySelector('input[type="checkbox"]');
+      control?.setAttribute('aria-invalid','true');
+      invalid.push({wrapper,control});
+    }
+  }
+  if(invalid.length){
+    notice.textContent='Please complete all required fields highlighted in red.';
+    invalid[0].wrapper?.scrollIntoView({behavior:'smooth',block:'center'});
+    invalid[0].control?.focus({preventScroll:true});
+    return false;
+  }
+  notice.textContent='';
+  return true;
+}
+function clearValidation(control){
+  if(!control)return;
+  const wrapper=control.closest('.question')||control.closest('label');
+  if(!wrapper)return;
+  const group=wrapper.dataset.id?fields.find(item=>item.id===wrapper.dataset.id):null;
+  const valid=group?.type==='CHECKBOX'
+    ?wrapper.querySelectorAll('input[type="checkbox"]:checked').length>0
+    :Array.from(wrapper.querySelectorAll('input,select,textarea')).filter(item=>!item.disabled).every(item=>item.validity.valid);
+  if(valid){
+    wrapper.classList.remove('field-invalid');
+    wrapper.querySelectorAll('[aria-invalid="true"]').forEach(item=>item.removeAttribute('aria-invalid'));
+  }
+  if(!root.querySelector('.field-invalid'))notice.textContent='';
 }
 async function intake(){
   fields=await api('fields');
@@ -72,7 +120,7 @@ async function intake(){
     else groups.at(-1).items.push(q);
   }
   const blocks=groups.filter(g=>g.items.length).map(g=>'<fieldset><legend>'+esc(g.title)+'</legend><div class="grid">'+g.items.map(question).join('')+'</div></fieldset>').join('');
-  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction *</legend><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label>'+field('email','Email *','email','maxlength="254" required')+'</fieldset>'+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
+  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction *</legend><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label></fieldset>'+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
 }
 const download=(file)=>'<button type="button" data-file="'+esc(file.id)+'">'+esc(file.name)+'</button>';
 async function staff(){
@@ -114,8 +162,10 @@ async function run(task){
   try{await task();notice.textContent='';}catch(e){notice.textContent=e.message||String(e);}
   finally{running=false;root.inert=false;}
 }
+root.addEventListener('input',e=>clearValidation(e.target));
 root.addEventListener('change',e=>{
   const node=e.target;
+  clearValidation(node);
   if(!node.name?.startsWith('q'))return;
   const other=node.form.elements[node.name+'Other'];
   if(other){other.hidden=node.value!=='__other';other.required=!other.hidden;}
@@ -133,6 +183,7 @@ root.addEventListener('change',e=>{
 });
 root.addEventListener('submit',e=>{
   e.preventDefault();
+  if(e.target.dataset.action==='submit'&&!validateApplication(e.target))return;
   run(async()=>{
     const data=new FormData(e.target), action=e.target.dataset.action;
     if(action==='submit'){
@@ -142,7 +193,7 @@ root.addEventListener('submit',e=>{
         const key='q'+q.id, value=data.get(key);
         return [q.id,q.type==='CHECKBOX'?data.getAll(key):value==='__other'?data.get(key+'Other'):value];
       }));
-      await api('submit',{token:requestToken,transaction:data.get('transaction'),email:data.get('email'),answers,files:await filesToData(data.getAll('docs'))});
+      await api('submit',{token:requestToken,transaction:data.get('transaction'),answers,files:await filesToData(data.getAll('docs'))});
       token=requestToken;
       sessionStorage.removeItem('tiponOnlineDraft');
     }else if(action==='upload')await api('upload',{files:await filesToData(data.getAll('docs'))});
