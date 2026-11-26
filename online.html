@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><link rel="icon" href="assets/tipon-mark.svg">
+<title>TIPON TAWAG · Online Queue</title>
+<style>
+:root{font:16px/1.55 system-ui,sans-serif;color:#093952;background:#eef6fa}
+*{box-sizing:border-box}
+body{margin:0}
+header{background:white;border-top:6px solid #f6b642;text-align:center;padding:22px;font-size:24px;font-weight:800}
+main{max-width:870px;margin:auto;padding:24px}
+main.staff{max-width:1400px}
+h1{font-size:clamp(26px,5vw,42px);margin:.2em 0 .6em}
+section,fieldset{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:18px;margin:16px 0}
+legend{font-weight:750;padding:0 9px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+label{display:grid;gap:5px;font-size:14px;font-weight:650}
+label.choice{display:flex;align-items:center;font-weight:400}
+input,textarea,select,button{font:inherit;border-radius:8px;border:1px solid #bed8e7;padding:9px;min-width:0}
+input,textarea,select{width:100%;background:#f8fcff;color:inherit}
+input[type=checkbox]{width:auto}
+button{cursor:pointer;color:white;background:#0879a4;border-color:#0879a4;font-weight:700}
+button:disabled{opacity:.55;cursor:default}
+a{color:#075477}
+table{width:100%;border-collapse:collapse}
+th,td{padding:11px;text-align:left;border-bottom:1px solid #dae9f1;vertical-align:top}
+th{background:#eef6fa}
+.scroll{overflow:auto}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.message{overflow-wrap:anywhere;white-space:pre-wrap;background:#eef6fa;padding:10px;border-radius:7px}
+#notice{color:#8c2a25}
+small{font-weight:400}
+[hidden]{display:none!important}
+</style>
+</head>
+<body><header><img src="assets/tipon-logo-hd.webp" alt="TIPON Federation" width="118" style="vertical-align:middle;margin-right:12px">TAWAG</header>
+<main><h1 id="heading">Online recruitment</h1><p id="notice" role="status">Loading…</p><div id="screen"></div><p id="backup" hidden><a id="backupLink" rel="noopener">Open the direct Online Queue page</a></p></main>
+<script src="config.js?v=online-2"></script>
+<script src="public-online-bridge.js?v=1"></script>
+<script>
+const onlineParams=new URLSearchParams(location.search);
+const init={view:onlineParams.get('online')==='onsite'?'onsite':'applicant',token:onlineParams.get('case')||'',site:onlineParams.get('site')||''};
+const root=document.getElementById('screen'), notice=document.getElementById('notice');
+let token=init.token, fields=[], running=false;
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const api=(action,data={})=>onlineRequest(action,{token,site:init.site,...data});
+const transaction=value=>value==='NH'?'New Hire':'Rehire';
+const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p><button>'+label+'</button></p></form>';
+const field=(name,label,type='text',attrs='')=>'<label>'+label+'<input name="'+name+'" type="'+type+'" '+attrs+'></label>';
+const docs='<label>Upload Pre-Requirements Documents (PDF or JPEG) *<input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
+const filesToData=async files=>{
+  if(files.length>5||files.some(f=>f.size>5*1024*1024)||files.reduce((n,f)=>n+f.size,0)>10*1024*1024)throw Error('Choose up to five files, no more than 5 MB each and 10 MB total.');
+  return Promise.all(files.map(file=>new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve({name:file.name,data:reader.result.split(',')[1]});
+    reader.onerror=()=>reject(Error('File could not be read.'));
+    reader.readAsDataURL(file);
+  })));
+};
+function question(q){
+  const title=esc(q.title)+(q.required?' *':''), name='q'+q.id, required=q.required?' required':'';
+  const help=q.help?'<small>'+esc(q.help)+'</small>':'';
+  if(q.type==='CHECKBOX')return '<div class="question" data-id="'+q.id+'"><strong>'+title+'</strong>'+help+q.choices.map(c=>'<label class="choice"><input type="checkbox" name="'+name+'" value="'+esc(c)+'">'+esc(c)+'</label>').join('')+(q.other?field(name,'Other'):'')+'</div>';
+  let control;
+  if(q.choices.length)control='<select name="'+name+'"'+required+'><option value="">Select an option</option>'+q.choices.map(c=>'<option>'+esc(c)+'</option>').join('')+(q.other?'<option value="__other">Other</option>':'')+'</select>'+(q.other?'<input name="'+name+'Other" placeholder="Specify other" hidden>':'');
+  else if(q.type==='PARAGRAPH_TEXT')control='<textarea name="'+name+'" maxlength="1500"'+required+'></textarea>';
+  else control='<input name="'+name+'" type="'+({DATE:'date',DATETIME:'datetime-local',TIME:'time'}[q.type]||'text')+'" maxlength="1500"'+required+'>';
+  return '<label class="question" data-id="'+q.id+'">'+title+help+control+'</label>';
+}
+async function intake(){
+  fields=await api('fields');
+  let groups=[{title:'Applicant information',items:[]}];
+  for(const q of fields) {
+    if(!q.id)groups.push({title:q.title,items:[]});
+    else groups.at(-1).items.push(q);
+  }
+  const blocks=groups.filter(g=>g.items.length).map(g=>'<fieldset><legend>'+esc(g.title)+'</legend><div class="grid">'+g.items.map(question).join('')+'</div></fieldset>').join('');
+  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction *</legend><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label>'+field('email','Email *','email','maxlength="254" required')+'</fieldset>'+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
+}
+async function conversation(){
+  const state=await api('read');
+  const refresh='<button type="button" data-refresh>Refresh messages</button>';
+  const controls=
+    '<p>Save <a href="'+esc(new URL('online.html?case='+token,location.href).href)+'">your private application link</a> to return to the chat.</p>';
+  let process='';
+  if(state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
+  if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
+  if(state.stage==='Booked')process+='<p>On your appointment date, scan the QR displayed at the office to join the active queue.</p>';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>' + '<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section><section><h2>Conversation</h2>'+refresh+state.messages.map(m=>'<p class="message"><strong>'+esc(m.author)+'</strong><br>'+esc(m.text)+'</p>').join('')+form('chat','<label>Your message<textarea name="message" maxlength="2000" required></textarea></label>','Send message')+'</section>';
+}
+async function render(){
+  if(init.view==='onsite'){
+    root.innerHTML=form('arrive',field('link','Paste your private application link','url','required'),'Confirm onsite arrival');
+    return;
+  }
+  if(token)return conversation();
+  return intake();
+}
+async function run(task){
+  if(running)return;
+  running=true;root.inert=true;notice.textContent='Working…';
+  try{await task();notice.textContent='';document.getElementById('backup').hidden=true;}
+  catch(e){
+    notice.textContent=e.message||String(e);
+    if(!bridgeWindow){
+      const fallback=new URL(window.TIPON_CONFIG.onlineBackendUrl);
+      fallback.searchParams.set('online',init.view);
+      if(token)fallback.searchParams.set('case',token);
+      if(init.site)fallback.searchParams.set('site',init.site);
+      document.getElementById('backupLink').href=fallback.href;
+      document.getElementById('backup').hidden=false;
+    }
+  }
+  finally{running=false;root.inert=false;}
+}
+root.addEventListener('change',e=>{
+  const node=e.target;
+  if(!node.name?.startsWith('q'))return;
+  const other=node.form.elements[node.name+'Other'];
+  if(other){other.hidden=node.value!=='__other';other.required=!other.hidden;}
+  const same=fields.find(q=>q.title.startsWith('Is your permanent address'));
+  if(same && node.name==='q'+same.id){
+    const skip=/^yes\b/i.test(node.value);
+    for(const field of fields.filter(q=>q.title.startsWith('Permanent '))){
+      const wrapper=root.querySelector('[data-id="'+field.id+'"]');
+      wrapper.hidden=skip;
+      for(const control of wrapper.querySelectorAll('input,select,textarea')){
+        control.disabled=skip; control.required=!skip&&field.required;
+      }
+    }
+  }
+});
+root.addEventListener('submit',e=>{
+  e.preventDefault();
+  run(async()=>{
+    const data=new FormData(e.target), action=e.target.dataset.action;
+    if(action==='submit'){
+      const requestToken=sessionStorage.getItem('tiponOnlineDraft')||Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,'0')).join('');
+      sessionStorage.setItem('tiponOnlineDraft',requestToken);
+      const answers=Object.fromEntries(fields.filter(q=>q.id).map(q=>{
+        const key='q'+q.id, value=data.get(key);
+        return [q.id,q.type==='CHECKBOX'?data.getAll(key):value==='__other'?data.get(key+'Other'):value];
+      }));
+      await api('submit',{token:requestToken,transaction:data.get('transaction'),email:data.get('email'),answers,files:await filesToData(data.getAll('docs'))});
+      token=requestToken;
+      sessionStorage.removeItem('tiponOnlineDraft');
+    }else if(action==='upload')await api('upload',{files:await filesToData(data.getAll('docs'))});
+    else if(action==='arrive'){
+      token=new URL(data.get('link')).searchParams.get('case')||'';
+      const result=await api('arrive');root.innerHTML='<section><h2>Checked in</h2><p>Your queue number is <strong>'+esc(result.number)+'</strong>.</p></section>';return;
+    }else await api(action,Object.fromEntries(data));
+    await render();
+  });
+});
+root.addEventListener('click',e=>{
+  if(e.target.closest('button[data-refresh]'))run(render);
+});
+if(init.view==='onsite')document.getElementById('heading').textContent='Office check-in';
+run(render);
+</script>
+</body>
+</html>

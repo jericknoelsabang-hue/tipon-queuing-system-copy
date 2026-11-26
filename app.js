@@ -254,8 +254,7 @@ function onlineQueueCard(){
  if(applicantButton) {
    applicantButton.disabled=!endpoint;
    if(endpoint) applicantButton.onclick=()=>{
-     const applicantUrl=new URL(endpoint);
-     applicantUrl.searchParams.set('online','applicant');
+     const applicantUrl=new URL('online.html',location.href);
      window.open(applicantUrl.href,'_blank','noopener');
    };
  }
