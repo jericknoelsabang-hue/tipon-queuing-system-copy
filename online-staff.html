@@ -28,7 +28,7 @@ th,td{padding:11px;text-align:left;vertical-align:middle;border-bottom:1px solid
 th{background:#eef6fa;font-size:13px}
 td{font-size:14px}
 .muted{color:#6c8998}
-.row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.row-actions button{padding:5px 8px;font-size:12px}.applicant-cell{min-width:230px}
 .file-count{color:#58798b;font-size:12px;margin-left:5px}
 dialog{width:min(560px,calc(100% - 28px));max-height:min(78vh,760px);border:1px solid #cfe2ed;border-radius:15px;padding:22px;color:#093952;box-shadow:0 18px 60px #092e4430}
 dialog::backdrop{background:#092e4470}
@@ -54,8 +54,8 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
   <p id="status" role="status" aria-live="polite">Connecting to TIPON Workspace…</p>
   <section class="card">
     <div class="table-wrap"><table>
-      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Requirements</th><th>Action</th></tr></thead>
-      <tbody id="listBody"><tr><td colspan="7" class="muted">Loading applications…</td></tr></tbody>
+      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Requirements</th></tr></thead>
+      <tbody id="listBody"><tr><td colspan="6" class="muted">Loading applications…</td></tr></tbody>
     </table></div>
   </section>
 </main>
@@ -109,13 +109,13 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
      return '<tr>'+
        '<td>'+esc(date(row.date,true))+'</td>'+
        '<td><b>'+esc(row.number||'—')+'</b></td>'+
-       '<td><b>'+esc(row.name||'—')+'</b></td>'+
+       '<td class="applicant-cell"><b>'+esc(row.name||'—')+'</b><div class="row-actions"><button class="success" type="button" data-complete="'+esc(row.id)+'" '+(canComplete?'':'disabled')+' aria-label="Complete review for '+esc(row.name||'applicant')+'">Complete</button><button class="secondary" type="button" data-message="'+esc(row.id)+'" data-name="'+esc(row.name||'Applicant')+'">Message</button><button class="danger" type="button" data-delete="'+esc(row.id)+'">Delete</button></div></td>'+
        '<td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td>'+
        '<td>'+esc(appointment(row.appointment))+'</td>'+
        '<td><button class="secondary" type="button" data-requirements="'+esc(row.id)+'" '+(files.length?'':'disabled')+'>View</button><span class="file-count">'+files.length+' file(s)</span></td>'+
-       '<td><div class="row-actions"><button class="success" type="button" data-complete="'+esc(row.id)+'" '+(canComplete?'':'disabled')+'>'+completeLabel+'</button><button class="secondary" type="button" data-message="'+esc(row.id)+'" data-name="'+esc(row.name||'Applicant')+'">Message</button><button class="danger" type="button" data-delete="'+esc(row.id)+'">Delete</button></div></td>'+
+       
        '</tr>';
-   }).join(''):'<tr><td colspan="7" class="muted">No online applications yet.</td></tr>';
+   }).join(''):'<tr><td colspan="6" class="muted">No online applications yet.</td></tr>';
  }
  async function loadList(silent=false){
    if(loading)return;
