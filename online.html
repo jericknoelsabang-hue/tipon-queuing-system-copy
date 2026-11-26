@@ -81,7 +81,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const api=(action,data={})=>onlineRequest(action,{token,site:init.site,...data});
 const star='<span class="required" aria-label="required">*</span>';
 const marked=(value,required)=>esc(value)+(required?' '+star:'');
-const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+(action==='book'?' class="booking-form"':'')+'>'+contents+'<p'+(['submit','upload','book'].includes(action)?' class="submit-row"':'')+'><button type="submit">'+label+'</button></p></form>;
+const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+(action==='book'?' class="booking-form"':'')+'>'+contents+'<p'+(['submit','upload','book'].includes(action)?' class="submit-row"':'')+'><button type="submit">'+label+'</button></p></form>';
 const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label.replace(/ \*$/,''))+(label.endsWith(' *')?' '+star:'')+'</span><input name="'+name+'" type="'+type+'" '+attrs+'></label>';
 const docs='<label><span>Upload Pre-Requirements Documents (PDF or JPEG) '+star+'</span><span class="file-picker"><input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><span class="file-picker-button" aria-hidden="true">Choose Files</span><span class="file-picker-name" aria-live="polite">No file chosen</span></span><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
 const filesToData=async files=>{
