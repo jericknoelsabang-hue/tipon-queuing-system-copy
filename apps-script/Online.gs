@@ -192,7 +192,7 @@ function onlineFiles_(props, input) {
   let total=0;
   const blobs=input.map(file=>{
     const name=onlineText_(file?.name,150), encoded=String(file?.data||'');
-    if(!name||encoded.length>7_000_000)throw Error('Each file must be at most 5 MB.');
+    if(!name||encoded.length>7000000)throw Error('Each file must be at most 5 MB.');
     const bytes=Utilities.base64Decode(encoded);
     total+=bytes.length;
     const signature=bytes.slice(0,5).map(b=>(b&255).toString(16).padStart(2,'0')).join('');
