@@ -386,7 +386,10 @@ if(init.view==='onsite')document.getElementById('heading').textContent='Office c
 run(render);
 setInterval(()=>{
   const composer=root.querySelector('form[data-action="sendApplicantMessage"]');
-  if(token&&!running&&!document.hidden&&!(composer&&composer.contains(document.activeElement)))run(render);
+  const draft=composer?.querySelector('textarea')?.value.trim()||'';
+  // Poll only while the review chat is visible; don't rebuild the booking form
+  // every ten seconds or discard an applicant's selected visit date.
+  if(token&&!running&&!document.hidden&&composer&&!composer.contains(document.activeElement)&&!draft)run(render);
 },10000);
 </script>
 </body>
