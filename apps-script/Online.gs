@@ -123,8 +123,9 @@ function onlineOperate_(action,d,staff) {
     if(!firstAnswer('First Name')||!firstAnswer('Last Name')) throw Error('First and last name are required.');
     const same=copiedFields.find(field=>field.title.startsWith('Is your permanent address'));
     const skipPermanent=same && /^yes\b/i.test(String(d.answers?.[same.id]||''));
-    const email=onlineText_(d.email,254);
-    if(!/^\S+@\S+\.\S+$/.test(email)) throw Error('Enter a valid email address.');
+    const emailField=copiedFields.find(field=>field.title==='Email / Gmail Address');
+    const email=onlineText_(d.answers?.[emailField?.id],254);
+    if(!/^\S+@\S+\.\S+$/.test(email)) throw Error('Enter a valid Email / Gmail Address.');
     profile.Email=email;
     for(const q of copiedFields){
       if(skipPermanent&&q.title.startsWith('Permanent '))continue;
