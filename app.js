@@ -247,6 +247,15 @@ function onlineQueueCard(){
  if(!card||!link)return;
  card.classList.toggle('hide',page!=='staff');
  const endpoint=window.TIPON_CONFIG?.onlineBackendUrl;
+ const applicantButton=$('onlineGetQueueSetup');
+ if(applicantButton) {
+   applicantButton.disabled=!endpoint;
+   if(endpoint) applicantButton.onclick=()=>{
+     const applicantUrl=new URL(endpoint);
+     applicantUrl.searchParams.set('online','applicant');
+     window.open(applicantUrl.href,'_blank','noopener');
+   };
+ }
  if(!endpoint)return;
  const url=new URL(endpoint);
  url.searchParams.set('online','staff');
