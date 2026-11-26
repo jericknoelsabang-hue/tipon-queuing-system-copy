@@ -83,6 +83,43 @@ function migrateLegacyOnlineStore_(props,book) {
   return migrated;
 }
 
+function onlineMergeSheetAnswers_(records, sheet) {
+  if(!sheet)return records.map(row=>{row._deleted=true;return row;});
+  const lastRow=sheet.getLastRow(), lastColumn=sheet.getLastColumn();
+  if(lastRow<2||lastColumn<1)return records.map(row=>{row._deleted=true;return row;});
+  const values=sheet.getRange(1,1,lastRow,lastColumn).getDisplayValues();
+  const headers=values[0].map(value=>String(value||'').trim());
+  const idColumn=headers.indexOf('Application ID');
+  if(idColumn<0)return records.map(row=>{row._deleted=true;return row;});
+  const answerById=new Map(values.slice(1).filter(row=>row[idColumn]).map(row=>[String(row[idColumn]),row]));
+  const metadata=new Set(['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links']);
+  return records.map(row=>{
+    const answer=answerById.get(String(row[0]));
+    if(!answer){row._deleted=true;return row;}
+    const cell=key=>{const column=headers.indexOf(key);return column<0?'':String(answer[column]||'');};
+    const profile=JSON.parse(row[5]||'{}');
+    for(const key of Object.keys(profile)){
+      const column=headers.indexOf(key);
+      if(column>=0)profile[key]=String(answer[column]||'');
+    }
+    const transaction=cell('Recruitment Transaction');
+    if(transaction==='New Hire')row[3]='NH';
+    else if(transaction==='Rehire')row[3]='RH';
+    const name=cell('Applicant Name');
+    if(name)row[4]=name;
+    else {
+      const first=String(profile['First Name']||'').trim(),last=String(profile['Last Name']||'').trim();
+      if(first||last)row[4]=[first,last].filter(Boolean).join(' ');
+    }
+    const status=cell('Application Status'),appointment=cell('Appointment (PHT)'),number=cell('Queue Number');
+    if(status)row[6]=status;
+    row[7]=appointment;row[9]=number;
+    row[5]=JSON.stringify(profile);
+    if(row[6]==='Deleted')row._deleted=true;
+    return row;
+  });
+}
+
 function onlineToken_() {
   return (Utilities.getUuid()+Utilities.getUuid()).replace(/-/g,'');
 }
@@ -143,7 +180,7 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  const staffActions=['list','complete','readStaff','onsiteLink','download','sendMessage'];
+  const staffActions=['list','complete','deleteApplication','readStaff','onsiteLink','download','sendMessage'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
   const mutations=['submit','upload','complete','book','arrive','confirmArrival','sendMessage','sendApplicantMessage'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
@@ -159,20 +196,21 @@ function onlineOperate_(action,d,staff) {
   const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
   const messages=data.getSheetByName(ONLINE_MESSAGES_SHEET);
   if(!apps||!files||!messages) throw Error('Run initializeOnlineQueue() before using Online Recruitment.');
-  const all=onlineRead_(apps), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
+  const rawRecords=onlineRead_(apps), answersSheet=data.getSheetByName('ONLINE_APPLICATIONS');
+  const all=onlineMergeSheetAnswers_(rawRecords,answersSheet), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
   const fileList=id=>onlineRead_(files).filter(file=>file[0]===id);
   if(action==='list') {
     const docs=onlineRead_(files);
-    return all.slice().reverse().map(row=>({id:row[0],date:row[2],transaction:row[3],name:row[4],stage:row[6],
+    return all.filter(row=>!row._deleted&&row[6]!=='Deleted').slice().reverse().map(row=>({id:row[0],date:row[2],transaction:row[3],name:row[4],stage:row[6],
       appointment:row[7],number:row[9],files:docs.filter(file=>file[0]===row[0]).map(file=>({name:file[2],id:file[1]}))}));
   }
   if(action==='submit'){
     if(!['NH','RH'].includes(d.transaction)) throw Error('Choose New Hire or Rehire.');
     if(!/^[a-f0-9]{64}$/.test(String(d.token||''))) throw Error('Invalid application session.');
     const digest=onlineDigest_(d.token);
-    const existing=all.find(row=>row[1]===digest);
+    const existing=all.find(row=>row[1]===digest&&!row._deleted&&row[6]!=='Deleted');
     if(existing){
       saveOnlineApplicantAnswers_(props,existing);
       return {url:url+'?online=applicant&case='+d.token};
@@ -207,15 +245,21 @@ function onlineOperate_(action,d,staff) {
     } catch(error) { for(const file of saved) file.setTrashed(true); throw error; }
     return {url:url+'?online=applicant&case='+d.token};
   }
-  const idx=staff?all.findIndex(row=>row[0]===d.id):(/^[a-f0-9]{64}$/.test(String(d.token||''))?all.findIndex(row=>row[1]===onlineDigest_(d.token)):-1);
+  const idx=staff?all.findIndex(row=>row[0]===d.id&&!row._deleted&&row[6]!=='Deleted'):(/^[a-f0-9]{64}$/.test(String(d.token||''))?all.findIndex(row=>row[1]===onlineDigest_(d.token)&&!row._deleted&&row[6]!=='Deleted'):-1);
   if(idx<0) throw Error('Application link unavailable.');
   const row=all[idx], id=row[0], stage=row[6];
   const update=(next,appointment=row[7],sequence=row[8],number=row[9])=>{
+    apps.getRange(idx+2,4,1,3).setValues([[row[3],row[4],row[5]].map(value=>"'"+String(value))]);
     apps.getRange(idx+2,7,1,4).setValues([[next,appointment,sequence,number].map(value=>"'"+String(value))]);
     const updated=apps.getRange(idx+2,1,1,ONLINE_HEADERS.length).getValues()[0];
     saveOnlineApplicantAnswers_(props,updated);
     return updated;
   };
+  if(action==='deleteApplication'){
+    if(!staff)throw Error('Only authorized recruiters can remove applications.');
+    update('Deleted');
+    return {ok:true};
+  }
   if(action==='sendMessage'||action==='sendApplicantMessage'){
     const applicantReply=action==='sendApplicantMessage';
     if(applicantReply&&staff)throw Error('Applicant replies must use the private application link.');
@@ -294,7 +338,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival'])};
+    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
     const pages=window.top!==window?window.top:window.opener;
     if(pages){
       window.addEventListener('message',event=>{
