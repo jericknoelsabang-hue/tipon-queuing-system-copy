@@ -144,6 +144,24 @@
     </div>
     <div class="card"><h2>Database &amp; Technical Notes</h2><p>Google Sheet: <a href="https://docs.google.com/spreadsheets/d/1WXpjoRxO5AXUtul2n6zUNZyGYW26efTW1wuXO8qgbeY/edit" target="_blank" rel="noopener">TIPON TAWAG Copy · Queue Database</a>. Tabs used by the queuing system: QUEUE, WINDOWS, TRANSACTION_TYPES, and SETTINGS.</p><p><b>Security:</b> Staff actions are currently PIN-free as requested. Access to the public Apps Script deployment is not authenticated. Do not use this configuration for sensitive production operations without server-side staff authorization.</p></div>
   </section>
+  <dialog id="tiponFormDialog" class="tipon-dialog" aria-labelledby="tiponFormTitle">
+    <form id="tiponRecruitmentForm">
+      <div class="tipon-dialog-head">
+        <div><span class="eyebrow">TIPÓN TAWAG · RECRUITMENT</span><h2 id="tiponFormTitle">Tipon Form</h2><p id="tiponFormIdentity" class="small-muted"></p></div>
+        <button id="tiponFormClose" class="btn ghost" type="button">Close</button>
+      </div>
+      <div id="tiponFormStatus" class="status hide" role="status"></div>
+      <div id="tiponFormFields" class="tipon-form-fields"></div>
+      <section class="tipon-capture">
+        <h3>Applicant Photo and Signature</h3>
+        <div class="tipon-capture-grid">
+          <div class="tipon-photo-box"><label class="field" for="tiponPhotoFile">Photo (take a new photo or choose an image)</label><input id="tiponPhotoFile" type="file" accept="image/jpeg,image/png" capture="user"><img id="tiponPhotoPreview" alt="Applicant photo preview" hidden><p id="tiponPhotoSaved" class="small-muted"></p></div>
+          <div class="tipon-signature-box"><label class="field" for="tiponSignaturePad">Signature specimen</label><canvas id="tiponSignaturePad" width="960" height="250" aria-label="Draw applicant signature here"></canvas><div class="row"><button id="clearTiponSignature" class="btn ghost sm" type="button">Clear signature</button><small id="tiponSignatureSaved" class="small-muted"></small></div></div>
+        </div>
+      </section>
+      <div class="tipon-dialog-actions"><button id="tiponFormCancel" class="btn ghost" type="button">Cancel</button><button id="tiponFormSave" class="btn success" type="submit">Save Tipon Form</button></div>
+    </form>
+  </dialog>
 </main>
 <footer class="footer">tipón TAWAG · Bawat tawag, may malasakit. · WIN AS A TEAM</footer>
 </body></html>
