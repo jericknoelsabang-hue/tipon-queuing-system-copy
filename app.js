@@ -263,11 +263,10 @@ function renderOnlineQueueRows(){
   const rows=(Array.isArray(onlineApplications)?onlineApplications:[]).filter(row=>row.stage!=='Review');
   body.innerHTML=rows.length?rows.map(row=>{
     const files=Array.isArray(row.files)?row.files:[];
-    const fileNames=files.map(file=>esc(file.name)).join('<br>');
     const rawAppointment=String(row.appointment||'');
     const appointment=rawAppointment?onlineQueueDate(rawAppointment.length===16?rawAppointment+':00+08:00':rawAppointment,rawAppointment.length>10):'—';
-    return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td class="online-queue-files">'+(fileNames||'—')+'</td><td><div class="online-queue-actions"><button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button></div></td></tr>';
-  }).join(''):'<tr><td colspan="8" class="empty">No completed online applications yet. Completed reviews will appear here.</td></tr>';
+    return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td><div class="online-queue-actions"><button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button><span class="small-muted">'+files.length+' file(s)</span></div></td></tr>';
+  }).join(''):'<tr><td colspan="7" class="empty">No completed online applications yet. Completed reviews will appear here.</td></tr>';
   if(count)count.textContent='Showing '+(rows.length?1:0)+'–'+rows.length+' of '+rows.length;
   if(statusNode){
     if(onlineQueueError)statusNode.textContent='Online Queue connection issue: '+onlineQueueError;
@@ -710,7 +709,7 @@ function tiponRenderFields(fields,answers){
    const selected=Array.isArray(value)?value:value?[value]:[];
    control='<div class="tipon-choice-list">'+(field.choices||[]).map(choice=>'<label><input type="checkbox" data-tipon-title="'+esc(field.title)+'" value="'+esc(choice)+'"'+(selected.includes(choice)?' checked':'')+'> '+esc(choice)+'</label>').join('')+(field.other?'<label><input type="checkbox" data-tipon-other-check="'+esc(field.id)+'" '+(selected.some(x=>!field.choices.includes(x))?'checked':'')+'> Other</label><input class="tipon-other" data-tipon-other="'+esc(field.id)+'" placeholder="Please specify" value="'+esc(selected.find(x=>!field.choices.includes(x))||'')+'" '+(selected.some(x=>!field.choices.includes(x))?'':'hidden')+'>':'')+'</div>';
   }else{const type=field.type==='DATE'?'date':field.type==='TIME'?'time':field.type==='DATETIME'?'datetime-local':'text';control=field.type==='PARAGRAPH_TEXT'?'<textarea data-tipon-title="'+esc(field.title)+'" rows="3"'+required+'>'+esc(value||'')+'</textarea>':'<input type="'+type+'" data-tipon-title="'+esc(field.title)+'" value="'+esc(value||'')+'"'+required+'>'}
-  return '<label class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+'"><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</label>';
+  return '<label class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+'"'+(field.required?' data-required="true"':'')+'><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</label>';
  }).join('');
  host.querySelectorAll('select').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]');if(other){other.hidden=el.value!=='__OTHER__';if(el.value!=='__OTHER__')other.value=''}});
  host.querySelectorAll('[data-tipon-other-check]').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]');if(other)other.hidden=!el.checked});
@@ -724,7 +723,7 @@ async function openTiponForm(i){
  $('tiponFormIdentity').textContent=(ticket.name||'Applicant')+' · '+(ticket.queueNo||'')+' · '+(ticket.transactionName||ticket.transaction||'');
  $('tiponFormFields').innerHTML='<p class="small-muted">Loading applicant information…</p>';$('tiponFormSave').disabled=true;$('tiponFormStatus').classList.add('hide');$('tiponPhotoFile').value='';$('tiponPhotoPreview').hidden=true;tiponPhotoData='';tiponSignatureDirty=false;
  const canvas=$('tiponSignaturePad');canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);$('tiponSignatureSaved').textContent='';
- if(!dialog.open)dialog.showModal();
+ delete $('tiponRecruitmentForm').dataset.validationAttempted;$('tiponRecruitmentForm').querySelectorAll('.tipon-invalid').forEach(node=>node.classList.remove('tipon-invalid'));if(!dialog.open)dialog.showModal();
  try{const result=await window.onlineRequest('getTiponForm',{id:ticket.ticketId,window:i});if(!result||!Array.isArray(result.fields))throw Error('Apps Script returned an invalid Tipon Form.');
   tiponRenderFields(result.fields,result.answers||{});$('tiponFormIdentity').textContent=(result.name||ticket.name||'Applicant')+' · '+(result.queueNo||ticket.queueNo||'')+' · '+(result.transaction||ticket.transaction||'');
   tiponFormTicket.photoUrl=result.answers?.['Photo URL']||'';tiponFormTicket.signatureUrl=result.answers?.['Signature URL']||'';
@@ -741,17 +740,49 @@ function tiponCollectAnswers(){
  host.querySelectorAll('[data-tipon-other-check]:checked').forEach(el=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]'),box=host.querySelector('[data-tipon-title]');const title=box?.dataset.tiponTitle;if(title&&other?.value.trim())(answers[title]||=[]).push(other.value.trim())});
  return answers;
 }
+function validateTiponForm(focusFirst=true){
+ const form=$('tiponRecruitmentForm'),firstInvalid=[];
+ if(!form)return false;
+ form.querySelectorAll('.tipon-invalid').forEach(node=>node.classList.remove('tipon-invalid'));
+ form.querySelectorAll('[aria-invalid="true"]').forEach(node=>node.removeAttribute('aria-invalid'));
+ const invalid=(wrapper,control)=>{
+  wrapper?.classList.add('tipon-invalid');
+  control?.setAttribute('aria-invalid','true');
+  if(!firstInvalid.length)firstInvalid.push({wrapper,control});
+ };
+ form.querySelectorAll('.tipon-question[data-required="true"]').forEach(wrapper=>{
+  const checks=[...wrapper.querySelectorAll('.tipon-choice-list input[type="checkbox"]')];
+  if(checks.length){
+   if(!checks.some(input=>input.checked))invalid(wrapper,checks[0]);
+   return;
+  }
+  const control=[...wrapper.querySelectorAll('input,select,textarea')].find(el=>!el.disabled&&!el.closest('[hidden]'));
+  if(control&&(!String(control.value||'').trim()||!control.validity.valid))invalid(wrapper,control);
+ });
+ const photoBox=$('tiponPhotoFile')?.closest('.tipon-photo-box');
+ const signatureBox=$('tiponSignaturePad')?.closest('.tipon-signature-box');
+ if(!tiponPhotoData&&!tiponFormTicket?.photoUrl)invalid(photoBox,$('tiponPhotoFile'));
+ if(!tiponSignatureDirty&&!tiponFormTicket?.signatureUrl)invalid(signatureBox,$('tiponSignaturePad'));
+ if(firstInvalid.length){
+  tiponStatus('Complete the required fields highlighted in red, then capture the applicant photo and signature.',true);
+  if(focusFirst){firstInvalid[0].wrapper?.scrollIntoView({behavior:'smooth',block:'center'});firstInvalid[0].control?.focus?.({preventScroll:true})}
+  return false;
+ }
+ return true;
+}
 function tiponBindDialog(){
  const form=$('tiponRecruitmentForm'),dialog=$('tiponFormDialog'),canvas=$('tiponSignaturePad');if(!form||form.dataset.bound)return;form.dataset.bound='1';
+ const revalidate=()=>{if(form.dataset.validationAttempted==='1')validateTiponForm(false)};
+ form.addEventListener('input',revalidate);form.addEventListener('change',revalidate);
  $('tiponFormClose').onclick=$('tiponFormCancel').onclick=()=>dialog.close();
- $('clearTiponSignature').onclick=()=>{canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);tiponSignatureDirty=true;$('tiponSignatureSaved').textContent='Draw a new signature before saving.'};
+ $('clearTiponSignature').onclick=()=>{canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);tiponSignatureDirty=true;$('tiponSignatureSaved').textContent='Draw a new signature before saving.';if(form.dataset.validationAttempted==='1')validateTiponForm(false)};
  const point=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height}};
  canvas.onpointerdown=e=>{tiponSignatureDrawing=true;canvas.setPointerCapture(e.pointerId);const p=point(e),ctx=canvas.getContext('2d');ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';tiponSignatureDirty=true};
  canvas.onpointermove=e=>{if(tiponSignatureDrawing){const p=point(e),ctx=canvas.getContext('2d');ctx.lineTo(p.x,p.y);ctx.stroke()}};
- ['pointerup','pointercancel','lostpointercapture'].forEach(name=>canvas.addEventListener(name,()=>tiponSignatureDrawing=false));
+ ['pointerup','pointercancel','lostpointercapture'].forEach(name=>canvas.addEventListener(name,()=>{tiponSignatureDrawing=false;if(form.dataset.validationAttempted==='1')validateTiponForm(false)}));
  $('tiponPhotoFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;if(!/^image\/(jpeg|png)$/.test(file.type)){tiponStatus('Choose a JPEG or PNG photo.',true);e.target.value='';return}
-  try{const image=new Image(),url=URL.createObjectURL(file);image.src=url;await image.decode();const scale=Math.min(1,1200/Math.max(image.width,image.height)),out=document.createElement('canvas');out.width=Math.round(image.width*scale);out.height=Math.round(image.height*scale);out.getContext('2d').drawImage(image,0,0,out.width,out.height);tiponPhotoData=out.toDataURL('image/jpeg',.82);$('tiponPhotoPreview').src=tiponPhotoData;$('tiponPhotoPreview').hidden=false;$('tiponPhotoSaved').textContent='New photo ready to save.';URL.revokeObjectURL(url)}catch(error){tiponStatus('Could not read the selected photo.',true)}};
- form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;if(!form.reportValidity())return;
+  try{const image=new Image(),url=URL.createObjectURL(file);image.src=url;await image.decode();const scale=Math.min(1,1200/Math.max(image.width,image.height)),out=document.createElement('canvas');out.width=Math.round(image.width*scale);out.height=Math.round(image.height*scale);out.getContext('2d').drawImage(image,0,0,out.width,out.height);tiponPhotoData=out.toDataURL('image/jpeg',.82);$('tiponPhotoPreview').src=tiponPhotoData;$('tiponPhotoPreview').hidden=false;$('tiponPhotoSaved').textContent='New photo ready to save.';URL.revokeObjectURL(url);if(form.dataset.validationAttempted==='1')validateTiponForm(false)}catch(error){tiponStatus('Could not read the selected photo.',true)}};
+ form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;form.dataset.validationAttempted='1';if(!validateTiponForm())return;
   const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture or choose the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
   tiponFormBusy=true;$('tiponFormSave').disabled=true;tiponStatus('Saving Tipon Form to ONLINE_APPLICATIONS…');
   try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponFormSaved.set(String(tiponFormTicket.ticketId),'saved');staffSignature='';staff();tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
