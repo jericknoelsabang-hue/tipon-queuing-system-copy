@@ -91,3 +91,15 @@ Run `node --test tests/queue-display.test.cjs` for stage separation, call/done t
 The current setup uses a public GitHub Pages frontend with a JSONP/GET Apps Script endpoint and **no authenticated staff access**, following earlier user requirements. A separate QR page and hidden navigation do not provide authorization. Anyone with the endpoint URL may potentially read queue details or execute staff actions. Do **not** use it for unrestricted sensitive production data until staff authentication, role authorization, HTTPS POST writes, and data-access restrictions are implemented.
 
 The local tests verify source syntax, UI mappings, and simulated Google Sheets operations; they **do not verify** the deployed Apps Script instance, cross-device synchronization, browser behavior, or production performance.
+
+## Online recruitment queue
+
+The Online Queue has its own applicant page and a Google-authenticated recruiter table. Use the **Online Queue** card below **Waiting Queue** to open the recruiter table. It shows Date, Queue, Name, Transaction, Action, and Uploaded Files.
+
+1. Create a separate Apps Script project for the duplicate. Add the complete `apps-script/Code.gs`, `apps-script/Online.gs`, and `apps-script/Online.html` files.
+2. In Script Properties, set `QUEUE_SPREADSHEET_ID` to a separate queue database and `ONLINE_RECRUITERS` to the comma-separated authorized Google Workspace email addresses. The deploying account needs access to the AP CONS source form.
+3. Run `setupTiponQueueSystem` and `initializeOnlineQueue` under the deployment owner. Initialization creates private application, message, and document storage. Recruiter access depends on Apps Script making the signed-in email available. Verify this with a recruiter account before using real applicant data.
+4. Deploy as the owner using an audience that supports your applicant access and recruiter identities. Set the duplicate's `onlineBackendUrl` and `backendUrl` in `config.js` to that deployment's /exec URL.
+5. Open the recruiter table and encode its **Office check-in link for onsite QR** into the QR displayed at the office. Post the applicant link separately.
+
+New Hire and Rehire use one sequence across dates. Applicants receive a private chat link after submitting the AP CONS fields and PDF/JPEG requirements. **Complete** enables scheduling. **Get Queue** allocates the number, such as `OLNH-000001` or `OLRH-000002`. The office QR checks the scheduled date and activates the existing waiting-queue ticket exactly once per application. The screenshot's private reviewer table opens from the Online Queue card on the Apps Script domain so the recruiter identity and document access can be checked at the server.

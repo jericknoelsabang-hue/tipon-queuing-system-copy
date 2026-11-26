@@ -242,6 +242,18 @@ function openStaffWindow(i){
  waitPage=0;precheckDonePage=0;completedPage=0;tableSignature={wait:'',precheckDone:'',completed:''};staffSignature='';
  staff();queueTables();window.scrollTo({top:0,behavior:'smooth'});
 }
+function onlineQueueCard(){
+ const card=$('queueOnlineCard'), link=$('onlineStaffLink');
+ if(!card||!link)return;
+ card.classList.toggle('hide',page!=='staff');
+ const endpoint=window.TIPON_CONFIG?.onlineBackendUrl;
+ if(!endpoint)return;
+ const url=new URL(endpoint);
+ url.searchParams.set('online','staff');
+ link.href=url.href;
+ link.hidden=false;
+ $('onlineStaffStatus').hidden=true;
+}
 function staff(){
   const n=Number(S.windowCount||0);
   if(hasLoaded&&activeStaffWindow>n){activeStaffWindow=0;updateStaffWindowRoute(0)}
@@ -438,7 +450,7 @@ function openTxEditor(code){
   $('editTxName').value=(S.transactionTypes||S.transactions||[]).find(x=>x.code===code)?.name||'';
   $('txEditor').classList.remove('hide');$('txEditor').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
-function render(){tv();metrics();staff();queueTables();if(page==='setup')setupTables();announceEditor();guideEditor();qr()}
+function render(){tv();metrics();staff();onlineQueueCard();queueTables();if(page==='setup')setupTables();announceEditor();guideEditor();qr()}
 /* 
  * Near-real-time updates via serialized, adaptive polling.
  * GitHub Pages + Google Apps Script cannot push updates to other devices,

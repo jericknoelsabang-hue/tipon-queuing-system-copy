@@ -7,7 +7,7 @@ const DEFAULT_ANNOUNCEMENT='Please keep your queue number until called.';
 const DEFAULT_QUEUE_GUIDE='Hello, mga ka-miyembro! Sa mga bagong dating na wala pang queuing number, i-scan ang QR code na nakikita sa screen. Piliin ang inyong service. Para sa Recruitment, ilagay ang First Name, Last Name, Recruitment Transaction, at Position, pagkatapos ay pindutin ang Get Queue Number. Para sa Member Concern, ilagay ang First Name, Last Name, at Type of Concern, pagkatapos ay pindutin ang Get Queue Number. Kapag mayroon na kayong queue number, please keep your queue number until called.';
 const SH=['Setting','Value','Updated At'];
 function setupTiponQueueSystem(){
-  const ss=SpreadsheetApp.openById(CFG.spreadsheetId);
+  const ss=ss_();
   migrateQueueSchema_(ss);
   ensure_(ss,CFG.queue,QH);ensure_(ss,CFG.windows,WH);ensure_(ss,CFG.tx,TH);ensure_(ss,CFG.settings,SH);ensure_(ss,'QUEUE_HISTORY',EH);
   const w=ss.getSheetByName(CFG.windows);
@@ -146,6 +146,7 @@ function styleQueueSheets_(ss){
   h.getRange(1,1,hRows,EH.length).createFilter();
 }
 function doGet(e){
+  if(e?.parameter?.online)return onlineQueueView_(e.parameter);
   const p=e?.parameter||{},cb=String(p.callback||'callback').replace(/[^A-Za-z0-9_.$]/g,''),action=String(p.action||'state');
   try{
     let r;switch(action){
@@ -192,7 +193,7 @@ function issueTicket_(ss,tx,first,last,pos){
   let max=0,existing=null;
   for(let i=rows.length-1;i>=0;i--){
     const row=rows[i];
-    if(dayCell_(row[1])!==today||code_(row[4],6)!==wantedCode)continue;
+    if(dayCell_(row[1])!==today||code_(row[4],6)!==wantedCode||String(row[3]).startsWith('OL'))continue;
     const suffix=String(row[3]).match(/-(\d+)$/);
     if(suffix)max=Math.max(max,Number(suffix[1]));
     if(!existing&&norm_(row[6])===desired)existing=row;
@@ -752,7 +753,7 @@ function ensure_(ss,name,h){
   return sheet;
 }
 let _tiponSpreadsheet=null;
-function ss_(){return _tiponSpreadsheet||(_tiponSpreadsheet=SpreadsheetApp.openById(CFG.spreadsheetId))}
+function ss_(){return _tiponSpreadsheet||(_tiponSpreadsheet=SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('QUEUE_SPREADSHEET_ID')||CFG.spreadsheetId))}
 function nameKey_(f,l){return norm_(f)+'|'+norm_(l)}function norm_(v){let s=String(v||'').trim().toUpperCase();if(s.normalize)s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');return s.replace(/[^A-Z0-9]/g,'')}
 function txt_(v,n){return String(v||'').replace(/[\u0000-\u001F\u007F]/g,' ').replace(/\s+/g,' ').trim().slice(0,n)}function code_(v,n){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,n)}
 function int_(v,a,b){v=Number(v);if(!Number.isInteger(v)||v<a||v>b)throw Error('Invalid window.');return v}function bool_(v){return typeof v==='boolean'?v:['TRUE','YES','1','ACTIVE'].includes(String(v).toUpperCase())}
