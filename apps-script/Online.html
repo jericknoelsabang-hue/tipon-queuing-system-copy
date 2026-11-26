@@ -89,7 +89,9 @@ async function conversation(recruiter){
   if(!recruiter && state.stage==='Booked')process+=arrivalControls(state.appointment);
   if(!recruiter && state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
   const profile=recruiter?'<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers||{}).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(Array.isArray(value)?value.join(', '):value)+'</dd>').join('')+'</dl></details>':'';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+(recruiter?download(f):esc(f.name))+'</li>').join('')+'</ul>'+process+'</section>';
+  const notices=Array.isArray(state.messages)?state.messages:[];
+  const noticeBlock=!recruiter&&notices.length?'<section><h3>Recruiter Messages</h3><ul>'+notices.map(message=>'<li><strong>Recruiter</strong><p>'+esc(message.text)+'</p><small>'+esc(message.at)+'</small></li>').join('')+'</ul><small>These are one-way updates. Replies are not available here.</small></section>':'';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+noticeBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+(recruiter?download(f):esc(f.name))+'</li>').join('')+'</ul>'+process+'</section>';
 }
 function arrivalControls(appointment){
   const date=String(appointment||'').slice(0,10);
