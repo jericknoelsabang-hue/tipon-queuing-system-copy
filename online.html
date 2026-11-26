@@ -52,7 +52,7 @@ input[type=file]{max-width:100%}
 .queue-badge{display:block;width:max-content;max-width:100%;margin:8px auto;padding:5px 11px;border-radius:999px;background:#e5f5fc;color:#08739c;font-size:12px;font-weight:800}
 .queue-code{display:block;text-align:center;font-size:clamp(42px,9vw,72px);line-height:1.08;letter-spacing:.02em;font-weight:850;color:#0879a4;margin:12px auto 18px;overflow-wrap:anywhere}
 .applicant-arrival{text-align:center;padding:clamp(22px,4vw,36px)}
-.applicant-arrival>h2{text-align:left}
+.applicant-arrival>h2{text-align:center;font-size:clamp(24px,4vw,34px);line-height:1.2;margin:0 0 14px}
 .applicant-arrival .appointment-date{text-align:center;margin:10px 0 16px}
 .applicant-arrival .submit-row{margin-top:14px}
 .application-approved .booking-form{max-width:100%}
@@ -252,7 +252,6 @@ async function conversation(){
       '<h3 id="applicant-queue-heading" class="queue-ready-heading">Your queue number is ready</h3>'+
       '<strong class="queue-code">'+esc(state.number||'')+'</strong>'+
       (appointment?'<p class="appointment-date"><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
-      '<p class="queue-guidance">Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+
       arrivalControls(state.appointment)+'</section>';
     return;
   }
@@ -283,7 +282,7 @@ function arrivalControls(appointment){
   const date=appointment?.slice(0,10);
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
   const today=[parts.year,parts.month,parts.day].join('-');
-  return '<p class="arrival-instruction">When you arrive at the office on your selected date, confirm your arrival below.</p>'+
+  return '<p class="arrival-instruction">On your selected visit date, check in by selecting “I’m at the office” when you arrive.</p>'+
     '<form data-action="confirmArrival"><p class="submit-row"><button'+(date===today?'':' disabled')+'>I’m at the office</button></p></form>';
 }
 function queueConfirmation(ticket){
@@ -291,7 +290,7 @@ function queueConfirmation(ticket){
   root.innerHTML='<section class="queue-confirmation" aria-labelledby="queue-ready-heading"><span class="queue-badge">Queue number confirmed</span>'+
     '<h2 id="queue-ready-heading" tabindex="-1">Your queue number is ready</h2><strong class="queue-code">'+esc(ticket.number)+'</strong>'+
     (appointment?'<p><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
-    '<p class="queue-guidance">Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+arrivalControls(ticket.appointment)+
+    arrivalControls(ticket.appointment)+
     '<div class="queue-actions"><a class="queue-action" href="online.html">Register Another Applicant</a><button type="button" data-queue-done>Done</button></div></section>';
   root.querySelector('#queue-ready-heading').focus();
 }
@@ -387,10 +386,14 @@ run(render);
 setInterval(()=>{
   const composer=root.querySelector('form[data-action="sendApplicantMessage"]');
   const draft=composer?.querySelector('textarea')?.value.trim()||'';
-  // Poll only while the review chat is visible; don't rebuild the booking form
-  // every ten seconds or discard an applicant's selected visit date.
-  if(token&&!running&&!document.hidden&&composer&&!composer.contains(document.activeElement)&&!draft)run(render);
-},10000);
+  const focused=root.contains(document.activeElement);
+  const visitDate=root.querySelector('input[name="appointment"]')?.value||'';
+  if(token&&!running&&!document.hidden&&!draft&&!focused)run(async()=>{
+    await render();
+    const dateInput=root.querySelector('input[name="appointment"]');
+    if(dateInput&&visitDate)dateInput.value=visitDate;
+  });
+},5000);
 </script>
 </body>
 </html>
