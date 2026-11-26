@@ -137,9 +137,3 @@ async function loadTransactions(){
 $('transaction').value='';
 choose('recruitment');void loadTransactions();
 })();
-const onlineApplicantLink=document.getElementById('onlineApplicantLink');
-if(onlineApplicantLink&&window.TIPON_CONFIG?.onlineBackendUrl){
- const url=new URL('online.html',location.href);
- onlineApplicantLink.href=url.href;
- document.getElementById('onlineRecruitmentEntry').hidden=false;
-}
