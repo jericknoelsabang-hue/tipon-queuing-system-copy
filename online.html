@@ -39,10 +39,10 @@ input[type=file]{max-width:100%}
 .field-invalid input:not([type=checkbox]),.field-invalid select,.field-invalid textarea,.field-invalid .file-picker{border-color:#d93025!important;background:#fff7f6!important;box-shadow:0 0 0 1px #d93025}
 .field-invalid .choice input[type=checkbox]{outline:2px solid #d93025;outline-offset:2px}
 .field-invalid>span:first-child,.field-invalid>strong{color:#b3261e}
-.submit-row,.certification{text-align:center}
-.certification label.choice{justify-content:center;align-items:flex-start;max-width:660px;margin:8px auto 0}
+.submit-row,.certification{text-align:center}.booking-form .submit-row{text-align:center}
+.certification label.choice{display:flex;flex-direction:row;justify-content:center;align-items:flex-start;max-width:760px;margin:8px auto 0;gap:8px}.certification label.choice span{flex:1;text-align:left}
 .certification span{line-height:1.55}
-.certification input{flex:none;margin-top:5px}
+.certification input[type=checkbox]{appearance:auto;flex:0 0 16px;width:16px;height:16px;padding:0;margin:3px 0 0;border:0;border-radius:3px}
 .work-group+.work-group{padding-top:14px;border-top:1px solid #dae9f1}
 .work-group h3{margin:0 0 12px;font-size:16px}
 .instructions p{margin:.45em 0 .85em}
@@ -81,7 +81,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const api=(action,data={})=>onlineRequest(action,{token,site:init.site,...data});
 const star='<span class="required" aria-label="required">*</span>';
 const marked=(value,required)=>esc(value)+(required?' '+star:'');
-const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+'>'+contents+'<p'+(['submit','upload'].includes(action)?' class="submit-row"':'')+'><button type="submit">'+label+'</button></p></form>';
+const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+(action==='book'?' class="booking-form"':'')+'>'+contents+'<p'+(['submit','upload','book'].includes(action)?' class="submit-row"':'')+'><button type="submit">'+label+'</button></p></form>;
 const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label.replace(/ \*$/,''))+(label.endsWith(' *')?' '+star:'')+'</span><input name="'+name+'" type="'+type+'" '+attrs+'></label>';
 const docs='<label><span>Upload Pre-Requirements Documents (PDF or JPEG) '+star+'</span><span class="file-picker"><input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><span class="file-picker-button" aria-hidden="true">Choose Files</span><span class="file-picker-name" aria-live="polite">No file chosen</span></span><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
 const filesToData=async files=>{
@@ -111,10 +111,8 @@ function question(q){
   return '<label class="question" data-id="'+q.id+'"><span>'+title+'</span>'+help+control+'</label>';
 }
 const instructions='<section class="instructions" aria-label="Application instructions">'+
-  '<strong>ENGLISH</strong><p>Please complete all applicable information accurately and truthfully. <strong>Fields marked with an asterisk ('+star+') are required.</strong></p>'+
-  '<p>After submitting, save your private application link to check your application status. On your appointment date, tap “Nandito na ako sa office” when you arrive. Present your queue number to the recruiter.</p>'+
-  '<strong>TAGALOG</strong><p>Pakisagutan nang tama at kumpleto ang lahat ng kinakailangang impormasyon. <strong>Ang mga tanong na may asterisk ('+star+') ay kailangang sagutan.</strong></p>'+
-  '<p>Pagkatapos isumite ang form, i-save ang private application link para masubaybayan ang status ng application. Sa araw ng appointment, pindutin ang “Nandito na ako sa office” kapag nasa opisina ka na. Ipakita ang queue number sa recruiter.</p></section>';
+  '<strong>Application Instructions</strong><p>Please complete all applicable information accurately and truthfully. <strong>Fields marked with an asterisk ('+star+') are required.</strong></p>'+
+  '<p>After submitting your application, keep the private application link shown on screen. Use it to check your status, choose an office visit date after review, and check in when you arrive.</p></section>';
 const row=items=>'<div class="form-row" style="--columns:'+items.length+'">'+items.map(question).join('')+'</div>';
 const rows=(items,sizes)=>{
   let offset=0;
@@ -223,9 +221,9 @@ function intake(){
 }
 function applicantGuidance(stage){
   const messages={
-    'Review':'Please wait while the recruiter reviews your application. Once it is complete, you can choose an onsite date and time to get your queue number.',
-    'Ready to book':'Your application is complete. Select the date and time you plan to visit the office, then tap Get Queue Number.',
-    'Booked':'Your queue number is ready. On your appointment date, tap “Nandito na ako sa office” when you arrive, then wait for your queue number to be called.',
+    'Review':'Your application is under review. Please wait while the recruiter reviews your documents. Once approved, you can select an office visit date and get your queue number.',
+    'Ready to book':'Your application has been approved. Select your office visit date, then select Get QUEUE NUMBER.',
+    'Booked':'Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.',
     'Arrived':'You have checked in at the office. Please wait for your queue number to be called.'
   };
   return '<p class="applicant-guidance" role="status">'+esc(messages[stage]||'Please wait for the recruiter to review your application.')+'</p>';
@@ -235,26 +233,32 @@ async function conversation(){
   const notices=Array.isArray(state.messages)?state.messages:[];
   const chatBlock='<section class="chat-card"><div class="chat-heading"><h3>Conversation</h3><button class="secondary" type="button" data-refresh-chat>Refresh messages</button></div><div class="chat-thread" aria-live="polite">'+(notices.length?notices.map(message=>{const applicant=message.author==='Applicant';return '<div class="chat-bubble '+(applicant?'applicant':'recruiter')+'"><div class="chat-meta"><span>'+esc(applicant?'You':'Recruiter')+'</span><time>'+esc(message.at)+'</time></div><p>'+esc(message.text)+'</p></div>'}).join(''):'<p class="muted">No messages yet. You can message your recruiter here.</p>')+'</div><form class="chat-compose" data-action="sendApplicantMessage"><label for="applicantMessage">Your message<textarea id="applicantMessage" name="message" maxlength="2000" required placeholder="Write a message to your recruiter…"></textarea></label><button type="submit">Send message</button></form></section>';
   let process='';
-  if(state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
+  if(state.stage==='Ready to book')process=form('book',field('appointment','Select your office visit date *','date','required'),'Get QUEUE NUMBER');
   if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
   if(state.stage==='Booked')process+=arrivalControls(state.appointment);
   if(state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
-  root.innerHTML='<section><h2>'+esc(state.name)+'</h2>'+applicantGuidance(state.stage)+'<p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+chatBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
+  const stageLabel=state.stage==='Review'?'Under Review':state.stage==='Ready to book'?'Ready to Book':state.stage==='Booked'?'Booked':state.stage==='Arrived'?'Checked In':state.stage;
+  const dateText=state.appointment?formatVisitDate(state.appointment):'';
+  root.innerHTML='<section><h2>'+esc(state.name)+'</h2>'+applicantGuidance(state.stage)+'<p>'+esc(stageLabel)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(dateText?' · '+esc(dateText):'')+'</p>'+chatBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
+}
+function formatVisitDate(value){
+  const day=String(value||'').slice(0,10);
+  const date=new Date(day+'T00:00:00+08:00');
+  return Number.isFinite(date.getTime())?new Intl.DateTimeFormat('en-PH',{dateStyle:'long',timeZone:'Asia/Manila'}).format(date):day;
 }
 function arrivalControls(appointment){
   const date=appointment?.slice(0,10);
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
   const today=[parts.year,parts.month,parts.day].join('-');
-  return '<p>When you reach the office on your appointment date, confirm your arrival.</p>'+
-    '<form data-action="confirmArrival"><button'+(date===today?'':' disabled')+'>Nandito na ako sa office</button></form>';
+  return '<p>When you arrive at the office on your selected date, confirm your arrival below.</p>'+
+    '<form data-action="confirmArrival"><p class="submit-row"><button'+(date===today?'':' disabled')+'>I’m at the office</button></p></form>';
 }
 function queueConfirmation(ticket){
-  const date=ticket.appointment?new Date(ticket.appointment+':00+08:00'):null;
-  const appointment=date&&Number.isFinite(date.getTime())?new Intl.DateTimeFormat('en-PH',{dateStyle:'long',timeStyle:'short',timeZone:'Asia/Manila'}).format(date)+' PHT':ticket.appointment||'';
+  const appointment=ticket.appointment?formatVisitDate(ticket.appointment):'';
   root.innerHTML='<section class="queue-confirmation" aria-labelledby="queue-ready-heading"><span class="queue-badge">Queue number confirmed</span>'+
     '<h2 id="queue-ready-heading" tabindex="-1">Your queue number is ready</h2><strong class="queue-code">'+esc(ticket.number)+'</strong>'+
     (appointment?'<p><strong>Appointment:</strong> '+esc(appointment)+'</p>':'')+
-    '<p>On your appointment date, tap “Nandito na ako sa office” when you arrive. Then wait for your queue number to be called.</p>'+arrivalControls(ticket.appointment)+
+    '<p>On your selected office visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.</p>'+arrivalControls(ticket.appointment)+
     '<div class="queue-actions"><a class="queue-action" href="online.html">Register Another Applicant</a><button type="button" data-queue-done>Done</button></div></section>';
   root.querySelector('#queue-ready-heading').focus();
 }
@@ -318,6 +322,8 @@ root.addEventListener('submit',e=>{
       const email=String(answers[emailQuestion?.id]||'').trim();
       await api('submit',{token:requestToken,transaction:data.get('transaction'),email,answers,files:await filesToData(data.getAll('docs'))});
       token=requestToken;
+      const privateUrl=new URL('online.html?case='+token,location.href);
+      history.replaceState({onlineApplicant:true},'',privateUrl.pathname+privateUrl.search);
       sessionStorage.removeItem('tiponOnlineDraft');
     }else if(action==='upload')await api('upload',{files:await filesToData(data.getAll('docs'))});
     else if(action==='arrive'){
