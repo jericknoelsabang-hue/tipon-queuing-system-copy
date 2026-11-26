@@ -141,8 +141,7 @@ function onlineQueue(action, input) {
 }
 
 function onlineOperate_(action,d,staff) {
-  const props=PropertiesService.getScriptProperties(), storeId=props.getProperty('ONLINE_STORE');
-  if(!storeId) throw Error('Online Queue has not been configured.');
+  const props=PropertiesService.getScriptProperties();
   const data=ss_();
   const apps=data.getSheetByName(ONLINE_RECORDS_SHEET);
   const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
@@ -190,9 +189,10 @@ function onlineOperate_(action,d,staff) {
     const saved=onlineFiles_(props,d.files);
     try {
       for(const file of saved) onlineWrite_(files,[record,file.getId(),file.getName()]);
-      onlineWrite_(apps,[record,digest,now.toISOString(),d.transaction,name,JSON.stringify(profile),'Review','','','']);
+      const applicationRow=[record,digest,now.toISOString(),d.transaction,name,JSON.stringify(profile),'Review','','',''];
+      onlineWrite_(apps,applicationRow);
+      saveOnlineApplicantAnswers_(props,applicationRow);
     } catch(error) { for(const file of saved) file.setTrashed(true); throw error; }
-    saveOnlineApplicantAnswers_(props,[record,digest,now.toISOString(),d.transaction,name,JSON.stringify(profile)]);
     return {url:url+'?online=applicant&case='+d.token};
   }
   const idx=staff?all.findIndex(row=>row[0]===d.id):(/^[a-f0-9]{64}$/.test(String(d.token||''))?all.findIndex(row=>row[1]===onlineDigest_(d.token)):-1);
