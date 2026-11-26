@@ -23,8 +23,13 @@ function initializeOnlineQueue() {
 
   const migrated=migrateLegacyOnlineStore_(props,queue);
   const fields=onlineFields_();
+  // Rebuild the applicant-facing answer table from the authoritative records.
+  // This makes first-time setup and recovery from an empty answer sheet idempotent.
+  const source=queue.getSheetByName(ONLINE_RECORDS_SHEET);
+  const records=onlineRead_(source);
+  for(const row of records)saveOnlineApplicantAnswers_(props,row,answers);
   SpreadsheetApp.flush();
-  return {ok:true,spreadsheetId:queue.getId(),records:queue.getSheetByName(ONLINE_RECORDS_SHEET).getLastRow()-1,
+  return {ok:true,spreadsheetId:queue.getId(),records:records.length,answersRows:records.length,
     answersSheet:answers.getName(),formFields:fields.filter(field=>field.id).length,legacyRecordsMigrated:migrated};
 }
 
@@ -138,10 +143,9 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  if(action==='chat'||action==='staffChat') throw Error('Applicant chat and replies are disabled.');
   const staffActions=['list','complete','readStaff','onsiteLink','download','sendMessage'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','complete','book','arrive','confirmArrival','sendMessage'];
+  const mutations=['submit','upload','complete','book','arrive','confirmArrival','sendMessage','sendApplicantMessage'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -212,11 +216,13 @@ function onlineOperate_(action,d,staff) {
     saveOnlineApplicantAnswers_(props,updated);
     return updated;
   };
-  if(action==='sendMessage'){
-    if(!staff)throw Error('Only authorized recruiters can send applicant messages.');
+  if(action==='sendMessage'||action==='sendApplicantMessage'){
+    const applicantReply=action==='sendApplicantMessage';
+    if(applicantReply&&staff)throw Error('Applicant replies must use the private application link.');
+    if(!applicantReply&&!staff)throw Error('Only authorized recruiters can send messages.');
     const message=onlineText_(d.message,2000);
     if(!message)throw Error('Enter a message before sending.');
-    onlineWrite_(messages,[id,staff,message,now.toISOString()]);
+    onlineWrite_(messages,[id,applicantReply?'Applicant':staff,message,now.toISOString()]);
     return {ok:true};
   }
   if(action==='download'){
@@ -226,7 +232,7 @@ function onlineOperate_(action,d,staff) {
     return {name:file[2],mime:blob.getContentType(),data:Utilities.base64Encode(blob.getBytes())};
   }
   if(action==='readStaff'||action==='read'){
-    const notices=onlineRead_(messages).filter(message=>String(message[0])===String(id)).map(message=>({author:'Recruiter',text:message[2],at:message[3]}));
+    const notices=onlineRead_(messages).filter(message=>String(message[0])===String(id)).map(message=>({author:String(message[1])==='Applicant'?'Applicant':'Recruiter',text:message[2],at:message[3]}));
     return {name:row[4],stage,appointment:row[7],number:row[9],url,today,
       answers:staff?JSON.parse(row[5]):null,files:fileList(id).map(f=>({name:f[2],id:staff?f[1]:''})),messages:notices};
   }
