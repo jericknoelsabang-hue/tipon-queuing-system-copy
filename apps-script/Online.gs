@@ -1,24 +1,73 @@
 const ONLINE_FORM_ID = '1HDcvrT_4QUU-xDZdl_PSEzzRhR_-XTqqL4NsxSPf9Bw';
 const ONLINE_HEADERS = ['ID','Token digest','Submitted at','Transaction','Name','Profile JSON','Stage','Appointment','Sequence','Queue number'];
+const ONLINE_RECORDS_SHEET = 'ONLINE_RECORDS';
+const ONLINE_DOCUMENTS_SHEET = 'ONLINE_DOCUMENTS';
+const ONLINE_MESSAGES_SHEET = 'ONLINE_MESSAGES';
 
 function initializeOnlineQueue() {
   const props = PropertiesService.getScriptProperties();
   const queue = ss_();
   if(queue.getId()!==CFG.spreadsheetId) throw Error('The TIPON TAWAG Copy database is unavailable.');
-  if (!props.getProperty('ONLINE_STORE')) {
-    const store = SpreadsheetApp.create('TIPON TAWAG Online Recruitment');
-    store.getSheets()[0].setName('Applications').appendRow(ONLINE_HEADERS);
-    store.insertSheet('Messages').appendRow(['Application','Author','Message','Sent at']);
-    store.insertSheet('Documents').appendRow(['Application','File ID','Filename']);
-    props.setProperty('ONLINE_STORE', store.getId());
-  }
-  const storeBook=SpreadsheetApp.openById(props.getProperty('ONLINE_STORE'));
-  const messageSheet=storeBook.getSheetByName('Messages')||storeBook.insertSheet('Messages');
-  if(messageSheet.getLastRow()===0)messageSheet.appendRow(['Application','Author','Message','Sent at']);
+
+  ensureOnlineSheet_(queue,ONLINE_RECORDS_SHEET,ONLINE_HEADERS);
+  ensureOnlineSheet_(queue,ONLINE_DOCUMENTS_SHEET,['Application','File ID','Filename']);
+  ensureOnlineSheet_(queue,ONLINE_MESSAGES_SHEET,['Application','Author','Message','Sent at']);
+
+  const answers=onlineAnswersSheet_(props);
   if (!props.getProperty('ONLINE_FOLDER')) props.setProperty('ONLINE_FOLDER', DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
+  const folder=DriveApp.getFolderById(props.getProperty('ONLINE_FOLDER'));
+  const access=folder.getSharingAccess();
+  if(access===DriveApp.Access.ANYONE||access===DriveApp.Access.ANYONE_WITH_LINK)
+    throw Error('The applicant upload folder must use restricted sharing.');
   if (!props.getProperty('ONLINE_ONSITE_KEY')) props.setProperty('ONLINE_ONSITE_KEY', onlineToken_());
-  onlineFields_();
-  onlineAnswersSheet_(props);
+
+  const migrated=migrateLegacyOnlineStore_(props,queue);
+  const fields=onlineFields_();
+  SpreadsheetApp.flush();
+  return {ok:true,spreadsheetId:queue.getId(),records:queue.getSheetByName(ONLINE_RECORDS_SHEET).getLastRow()-1,
+    answersSheet:answers.getName(),formFields:fields.filter(field=>field.id).length,legacyRecordsMigrated:migrated};
+}
+
+function ensureOnlineSheet_(book,name,headers) {
+  let sheet=book.getSheetByName(name);
+  if(!sheet) sheet=book.insertSheet(name);
+  if(sheet.getLastRow()===0) {
+    sheet.getRange(1,1,1,headers.length).setValues([headers]);
+  } else {
+    const width=Math.max(sheet.getLastColumn(),headers.length);
+    const current=sheet.getRange(1,1,1,width).getDisplayValues()[0];
+    const matches=headers.every((header,index)=>String(current[index]||'').trim()===header);
+    if(!matches) throw Error('Unexpected header row in '+name+'. Existing data was not changed.');
+  }
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function migrateLegacyOnlineStore_(props,book) {
+  const legacyId=String(props.getProperty('ONLINE_STORE')||'').trim();
+  if(!legacyId||legacyId===CFG.spreadsheetId||props.getProperty('ONLINE_STORE_MIGRATED')==='YES') return 0;
+  const legacy=SpreadsheetApp.openById(legacyId);
+  const mappings=[
+    ['Applications',ONLINE_RECORDS_SHEET],
+    ['Documents',ONLINE_DOCUMENTS_SHEET],
+    ['Messages',ONLINE_MESSAGES_SHEET]
+  ];
+  let migrated=0;
+  for(const [sourceName,targetName] of mappings) {
+    const source=legacy.getSheetByName(sourceName),target=book.getSheetByName(targetName);
+    if(!source||!target||source.getLastRow()<2) continue;
+    const existing=new Set(onlineRead_(target).map(row=>String(row[0]||'')));
+    for(const row of onlineRead_(source)) {
+      const id=String(row[0]||'');
+      if(!id||existing.has(id)) continue;
+      target.appendRow(row.map(value=>String(value??'')));
+      existing.add(id);
+      migrated++;
+    }
+  }
+  props.setProperty('ONLINE_STORE_MIGRATED','YES');
+  props.setProperty('ONLINE_STORE_MIGRATED_AT',new Date().toISOString());
+  return migrated;
 }
 
 function onlineToken_() {
@@ -94,10 +143,11 @@ function onlineQueue(action, input) {
 function onlineOperate_(action,d,staff) {
   const props=PropertiesService.getScriptProperties(), storeId=props.getProperty('ONLINE_STORE');
   if(!storeId) throw Error('Online Queue has not been configured.');
-  const data=SpreadsheetApp.openById(storeId), apps=data.getSheetByName('Applications');
-  const files=data.getSheetByName('Documents');
-  const messages=data.getSheetByName('Messages')||data.insertSheet('Messages');
-  if(messages.getLastRow()===0)messages.appendRow(['Application','Author','Message','Sent at']);
+  const data=ss_();
+  const apps=data.getSheetByName(ONLINE_RECORDS_SHEET);
+  const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
+  const messages=data.getSheetByName(ONLINE_MESSAGES_SHEET);
+  if(!apps||!files||!messages) throw Error('Run initializeOnlineQueue() before using Online Recruitment.');
   const all=onlineRead_(apps), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
@@ -126,7 +176,6 @@ function onlineOperate_(action,d,staff) {
     const emailField=copiedFields.find(field=>field.title==='Email / Gmail Address');
     const email=onlineText_(d.answers?.[emailField?.id],254);
     if(!/^\S+@\S+\.\S+$/.test(email)) throw Error('Enter a valid Email / Gmail Address.');
-    profile.Email=email;
     for(const q of copiedFields){
       if(skipPermanent&&q.title.startsWith('Permanent '))continue;
       const raw=d.answers?.[q.id];
@@ -258,8 +307,7 @@ function onlineAnswersSheet_(props) {
 function saveOnlineApplicantAnswers_(props, row, destination) {
   const sheet=destination||onlineAnswersSheet_(props);
   const profile=JSON.parse(row[5]||'{}');
-  const storeId=props.getProperty('ONLINE_STORE');
-  const documentsSheet=storeId?SpreadsheetApp.openById(storeId).getSheetByName('Documents'):null;
+  const documentsSheet=ss_().getSheetByName(ONLINE_DOCUMENTS_SHEET);
   const documents=documentsSheet?onlineRead_(documentsSheet).filter(file=>String(file[0])===String(row[0])):[];
   const metadata={
     'Application ID':row[0],
@@ -295,7 +343,8 @@ function backfillOnlineApplicantAnswers() {
   try{
     onlineStaff_();
     const props=PropertiesService.getScriptProperties();
-    const source=SpreadsheetApp.openById(props.getProperty('ONLINE_STORE')).getSheetByName('Applications');
+    const source=ss_().getSheetByName(ONLINE_RECORDS_SHEET);
+    if(!source) throw Error('Run initializeOnlineQueue() before backfilling applicant answers.');
     const destination=onlineAnswersSheet_(props);
     const applications=onlineRead_(source);
     for(const row of applications)saveOnlineApplicantAnswers_(props,row,destination);
