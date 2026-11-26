@@ -146,8 +146,12 @@ function styleQueueSheets_(ss){
   h.getRange(1,1,hRows,EH.length).createFilter();
 }
 function doGet(e){
-  if(e?.parameter?.online)return onlineQueueView_(e.parameter);
-  const p=e?.parameter||{},cb=String(p.callback||'callback').replace(/[^A-Za-z0-9_.$]/g,''),action=String(p.action||'state');
+  const p=e?.parameter||{};
+  // Apps Script bridge requests run in the same web-app deployment as the queue API.
+  // Route these before JSONP queue actions so the iframe can call onlineQueue().
+  if(p.bridge)return onlineBridge_(String(p.bridge),String(p.staff||'')==='1');
+  if(p.online)return onlineQueueView_(p);
+  const cb=String(p.callback||'callback').replace(/[^A-Za-z0-9_.$]/g,''),action=String(p.action||'state');
   try{
     let r;switch(action){
       case'health':r={ok:true,name:ss_().getName(),windows:windowCount_(),federationMode:true,queueHistory:true,version:'federation-v14',queueGuideSupported:true};break;
