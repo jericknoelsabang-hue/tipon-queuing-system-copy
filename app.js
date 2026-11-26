@@ -10,6 +10,7 @@ let connectionHealthy=false;
 let lastGuideCue=null,guideDirty=false;let armed=localStorage.getItem('tqSound')==='1',audio=null,waitPage=0,precheckDonePage=0,completedPage=0,editWindow=0,editTxCode='',editWindowTxs=[],activeStaffWindow=Number(new URLSearchParams(location.search).get('window'))||0;
 let remarksTimer=null,remarksSaveQueue=Promise.resolve(),remarksDraft={ticketId:'',value:''},remarksSaved={ticketId:'',value:''},remarksQueued={ticketId:'',value:''};
 let onlineApplications=[],onlineQueueLoading=false,onlineQueueLastLoaded=0,onlineQueueError='';
+const tiponFormSaved=new Map(),tiponFormChecks=new Set();
 const queueBoards={};
 for(const [stage,prefix,emptyText] of [
   ['precheck','precheckQueue','No queues waiting for pre-checking.'],
@@ -390,14 +391,18 @@ function staff(){
   const donePrecheckTitle=!t?'Call a queue in Pre Checking first.':hasAvailableDestination?'A destination window is available. Transfer the ticket directly.':!connectionHealthy?'Connect to Apps Script to update the queue.':!PRECHECK_TRANSFER_VERSIONS.has(S.version)?'Deploy Federation v13 Apps Script.':'Save this checked ticket to Done Pre-check until a matching window becomes available.';
   const completePrecheckDisabled=!t||!connectionHealthy||S.version!==REQUIRED||activeWindowActions.has(String(i));
   const completePrecheckTitle=!t?'Call a queue in Pre Checking first.':!connectionHealthy?'Connect to Apps Script to update the queue.':S.version!==REQUIRED?'Deploy Federation v14 Apps Script to enable direct completion.':'Complete the queue directly from Pre Checking without transferring it to another window.';
+  ensureTiponFormStatus(i,t);
   const tiponVisible=!prechecking&&tiponAssignedWindow(selected),tiponEnabled=Boolean(t&&tiponEligibleTransaction(t)&&connectionHealthy&&!activeWindowActions.has(String(i)));
+  const tiponState=t&&tiponEligibleTransaction(t)?(tiponFormSaved.get(String(t.ticketId))||'checking'):'saved';
+  const completeDisabled=!t||!connectionHealthy||activeWindowActions.has(String(i))||(tiponEligibleTransaction(t)&&tiponState!=='saved');
+  const completeTitle=!t?'Call a queue first.':!connectionHealthy?'Connect to Apps Script to update the queue.':tiponEligibleTransaction(t)&&tiponState==='checking'?'Checking whether the Tipon Form has been saved.':tiponEligibleTransaction(t)&&tiponState!=='saved'?'Save the Tipon Form, including the applicant photo and signature, first.':'Complete this transaction.';
   const tiponButton=tiponVisible?'<button class="btn ghost" data-action="tiponForm" data-win="'+i+'" type="button"'+(tiponEnabled?'':' disabled')+' title="'+esc(tiponEnabled?'Open the Tipon applicant information form.':!t?'Call a New Hire, Rehire, or Transfer queue first.':'Available for New Hire, Rehire, and Transfer tickets only.')+'">Tipon Form</button>':'';
   $('staffWins').innerHTML='<div class="window-grid"><div class="window-card"><div class="split"><h3>Window '+i+'</h3><span class="pill">'+esc(txName)+'</span></div>'+
     '<div class="current">'+(t?'<b class="current-no">'+esc(t.queueNo)+'</b><strong>'+esc(t.name)+'</strong><small>'+esc(t.transactionName)+'</small>':'<small class="muted">No active applicant or member</small>')+'</div>'+
     '<p class="recruiter-label"><b>Recruiter:</b> '+esc(recruiter)+'</p>'+
     '<div class="window-actions '+(prechecking?'prechecking':'standard')+'"><button class="btn primary" data-action="call" data-win="'+i+'" type="button"'+(callNextDisabled?' disabled':'')+(callNextTitle?' title="'+esc(callNextTitle)+'"':'')+'>Call Next</button>'+
     '<button class="btn ghost" data-action="recall" data-win="'+i+'" type="button"'+(!t||!connectionHealthy?' disabled':'')+'>Recall</button>'+
-    (prechecking?'<button class="btn success" data-action="donePrecheck" data-win="'+i+'" type="button"'+(donePrecheckDisabled?' disabled':'')+' title="'+esc(donePrecheckTitle)+'">Done Pre-check</button><button class="btn success" data-action="completePrecheck" data-win="'+i+'" type="button"'+(completePrecheckDisabled?' disabled':'')+' title="'+esc(completePrecheckTitle)+'">Complete</button>':'<button class="btn success" data-action="complete" data-win="'+i+'" type="button"'+(!t||!connectionHealthy?' disabled':'')+'>Complete</button>')+tiponButton+'</div>'+
+    (prechecking?'<button class="btn success" data-action="donePrecheck" data-win="'+i+'" type="button"'+(donePrecheckDisabled?' disabled':'')+' title="'+esc(donePrecheckTitle)+'">Done Pre-check</button><button class="btn success" data-action="completePrecheck" data-win="'+i+'" type="button"'+(completePrecheckDisabled?' disabled':'')+' title="'+esc(completePrecheckTitle)+'">Complete</button>':'<button class="btn success" data-action="complete" data-win="'+i+'" type="button"'+(completeDisabled?' disabled':'')+' title="'+esc(completeTitle)+'">Complete</button>')+tiponButton+'</div>'+
     (prechecking?transferPanel+remarksPanel:remarksPanel)+'</div></div>';
   document.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>queueAction(button.dataset.action,+button.dataset.win));
   const remarksInput=$('windowRemarks');
@@ -678,6 +683,19 @@ function queueRemarksSave(i,ticketId,value){
 }
 let tiponFormWindow=0,tiponFormTicket=null,tiponFormBusy=false,tiponPhotoData='',tiponSignatureDirty=false,tiponSignatureDrawing=false;
 function tiponEligibleTransaction(ticket){const code=String(ticket?.transaction||'').toUpperCase(),number=String(ticket?.queueNo||'').toUpperCase();return ['NH','RH','TR'].includes(code)||/^OL(?:NH|RH)\d/.test(number)}
+function ensureTiponFormStatus(i,ticket){
+ const id=String(ticket?.ticketId||'');
+ if(!id||!tiponEligibleTransaction(ticket)||tiponFormSaved.has(id)||tiponFormChecks.has(id))return;
+ if(typeof window.onlineRequest!=='function'){tiponFormSaved.set(id,'required');return}
+ tiponFormSaved.set(id,'checking');tiponFormChecks.add(id);
+ window.onlineRequest('getTiponForm',{id,window:i}).then(result=>{
+  const answers=result?.answers||{};
+  tiponFormSaved.set(id,answers['Photo URL']&&answers['Signature URL']?'saved':'required');
+ }).catch(()=>tiponFormSaved.set(id,'required')).finally(()=>{
+  tiponFormChecks.delete(id);
+  if(String(win(i)?.ticketId||'')===id){staffSignature='';staff();}
+ });
+}
 function tiponAssignedWindow(value){const list=assignmentList(value);return list!=='ALL'&&list.some(code=>['NH','RH','TR'].includes(String(code).toUpperCase()))}
 function tiponStatus(message,error=false){const el=$('tiponFormStatus');if(!el)return;el.textContent=message;el.classList.remove('hide');el.classList.toggle('err',error)}
 function tiponRenderFields(fields,answers){
@@ -710,6 +728,8 @@ async function openTiponForm(i){
  try{const result=await window.onlineRequest('getTiponForm',{id:ticket.ticketId,window:i});if(!result||!Array.isArray(result.fields))throw Error('Apps Script returned an invalid Tipon Form.');
   tiponRenderFields(result.fields,result.answers||{});$('tiponFormIdentity').textContent=(result.name||ticket.name||'Applicant')+' · '+(result.queueNo||ticket.queueNo||'')+' · '+(result.transaction||ticket.transaction||'');
   tiponFormTicket.photoUrl=result.answers?.['Photo URL']||'';tiponFormTicket.signatureUrl=result.answers?.['Signature URL']||'';
+  tiponFormSaved.set(String(ticket.ticketId),tiponFormTicket.photoUrl&&tiponFormTicket.signatureUrl?'saved':'required');
+  staffSignature='';staff();
   if(tiponFormTicket.photoUrl)$('tiponPhotoSaved').textContent='Existing photo saved. Choose a new photo to replace it.';
   if(tiponFormTicket.signatureUrl)$('tiponSignatureSaved').textContent='Existing signature saved. Draw again to replace it.';
   $('tiponFormSave').disabled=false;
@@ -734,7 +754,7 @@ function tiponBindDialog(){
  form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;if(!form.reportValidity())return;
   const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture or choose the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
   tiponFormBusy=true;$('tiponFormSave').disabled=true;tiponStatus('Saving Tipon Form to ONLINE_APPLICATIONS…');
-  try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
+  try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponFormSaved.set(String(tiponFormTicket.ticketId),'saved');staffSignature='';staff();tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
   catch(error){tiponStatus(String(error?.message||error||'Unable to save Tipon Form.'),true)}finally{tiponFormBusy=false;$('tiponFormSave').disabled=false}
  };
 }
@@ -744,7 +764,10 @@ async function queueAction(action,i){
  if(action==='complete'&&isPrecheckingWindow(i)){staffMessage('Pre Checking tickets must be transferred to an available service window.','err');return}
  if(action==='donePrecheck'&&!isPrecheckingWindow(i)){staffMessage('Done Pre-check is only available in a Pre Checking window.','err');return}
   if(action==='completePrecheck'&&!isPrecheckingWindow(i)){staffMessage('Complete from Pre Checking is only available in a Pre Checking window.','err');return}
- const key=String(i);
+ const key=String(i),currentTicket=win(i);
+ if(action==='complete'&&tiponEligibleTransaction(currentTicket)&&tiponFormSaved.get(String(currentTicket.ticketId))!=='saved'){
+  staffMessage('Save the Tipon Form, including the applicant photo and signature, before completing this transaction.','err');return;
+ }
  if(activeWindowActions.has(key))return;
  activeWindowActions.add(key);clearStaffMessage();
  const button=document.querySelector('[data-action="'+action+'"][data-win="'+i+'"]');
