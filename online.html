@@ -171,12 +171,14 @@ function intake(){
 async function conversation(){
   const state=await api('read');
   const controls='<p>Save <a href="'+esc(new URL('online.html?case='+token,location.href).href)+'">your private application link</a> to check your application status.</p>';
+  const notices=Array.isArray(state.messages)?state.messages:[];
+  const noticeBlock=notices.length?'<section class="recruiter-notices"><h3>Recruiter Messages</h3><ul>'+notices.map(message=>'<li><strong>Recruiter</strong><p>'+esc(message.text)+'</p><small>'+esc(message.at)+'</small></li>').join('')+'</ul><p><small>These are one-way updates. Replies are not available here.</small></p></section>':'';
   let process='';
   if(state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
   if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
   if(state.stage==='Booked')process+=arrivalControls(state.appointment);
   if(state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p><p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+noticeBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
 }
 function arrivalControls(appointment){
   const date=appointment?.slice(0,10);
