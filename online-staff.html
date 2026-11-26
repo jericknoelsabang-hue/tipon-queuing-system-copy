@@ -17,27 +17,31 @@ h2{font-size:21px;margin:0 0 8px}
 p{color:#58798b}
 .card{background:#fff;border:1px solid #cfe2ed;border-radius:14px;padding:20px;margin:16px 0}
 .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-button,.button{font:inherit;border:1px solid #bed8e7;border-radius:8px;padding:9px 13px;background:#0879a4;color:#fff;font-weight:750;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+button,.button{font:inherit;border:1px solid #bed8e7;border-radius:8px;padding:8px 11px;background:#0879a4;color:#fff;font-weight:750;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 button.secondary,.button.secondary{background:#fff;color:#075477}
 button.success{background:#16885e;border-color:#16885e}
-button:disabled{opacity:.55;cursor:default}
+button:disabled{opacity:.5;cursor:not-allowed}
 a{color:#075477}
 .table-wrap{overflow:auto}
-table{width:100%;border-collapse:collapse;min-width:900px}
+table{width:100%;border-collapse:collapse;min-width:980px}
 th,td{padding:11px;text-align:left;vertical-align:middle;border-bottom:1px solid #dae9f1}
 th{background:#eef6fa;font-size:13px}
 td{font-size:14px}
 .muted{color:#6c8998}
-.badge{display:inline-block;padding:4px 9px;border-radius:20px;background:#e8f2f7;color:#075477;font-size:12px;font-weight:800}
-.badge.ready{background:#e8f7ee;color:#167147}
-.badge.arrived{background:#fff3df;color:#86572b}
-dl{display:grid;grid-template-columns:minmax(170px,260px) minmax(0,1fr);gap:8px 16px;margin:18px 0}
-dt{font-weight:800;color:#456477;overflow-wrap:anywhere}
-dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-.file-list{display:grid;gap:9px;padding:0;list-style:none}
-.file-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #dae9f1;border-radius:8px}
+.row-actions{display:flex;gap:6px;flex-wrap:wrap}
+.file-count{color:#58798b;font-size:12px;margin-left:5px}
+dialog{width:min(560px,calc(100% - 28px));max-height:min(78vh,760px);border:1px solid #cfe2ed;border-radius:15px;padding:22px;color:#093952;box-shadow:0 18px 60px #092e4430}
+dialog::backdrop{background:#092e4470}
+.dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.dialog-head h2{margin:0}
+.dialog-copy{margin:8px 0 16px}
+.file-list{display:grid;gap:9px;padding:0;list-style:none;margin:14px 0}
+.file-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #dae9f1;border-radius:8px;overflow-wrap:anywhere}
+label{display:block;font-weight:700;margin:14px 0 6px}
+textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px solid #bed8e7;border-radius:8px;padding:11px;font:inherit;color:inherit;background:#f8fcff}
+.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 [hidden]{display:none!important}
-@media(max-width:600px){main{padding:0 12px 30px}.card{padding:14px}dl{grid-template-columns:1fr;gap:3px}dd{margin-bottom:10px}.page-head{align-items:flex-start}}
+@media(max-width:600px){main{padding:0 12px 30px}.card{padding:14px}dialog{padding:16px}.page-head{align-items:flex-start}}
 </style>
 </head>
 <body>
@@ -47,118 +51,161 @@ dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
     <div><h1>Online Queue</h1><p>Recruitment applications submitted online</p></div>
     <div class="actions"><a class="button secondary" href="./?view=staff">Staff Console</a><button id="refresh" type="button">Refresh</button></div>
   </div>
-  <p id="status" class="status" role="status" aria-live="polite">Connecting to TIPON Workspace…</p>
-  <section id="listView" class="card">
+  <p id="status" role="status" aria-live="polite">Connecting to TIPON Workspace…</p>
+  <section class="card">
     <div class="table-wrap"><table>
-      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Status</th><th>Requirements</th><th>Actions</th></tr></thead>
-      <tbody id="listBody"><tr><td colspan="8" class="muted">Loading applications…</td></tr></tbody>
+      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Requirements</th><th>Action</th></tr></thead>
+      <tbody id="listBody"><tr><td colspan="7" class="muted">Loading applications…</td></tr></tbody>
     </table></div>
   </section>
-  <section id="detailView" class="card" hidden>
-    <div class="actions"><button id="back" class="secondary" type="button">Back to Online Queue</button><button id="complete" class="success" type="button" hidden>Complete Application Review</button></div>
-    <h2 id="applicantName" style="margin-top:18px"></h2>
-    <p id="applicantStatus"></p>
-    <h3>Applicant Information</h3><dl id="answers"></dl>
-    <h3>Uploaded Requirements</h3><ul id="files" class="file-list"></ul>
-  </section>
 </main>
-<script src="config.js?v=online-4"></script>
-<script src="public-online-bridge.js?v=4" data-mode="staff"></script>
+
+<dialog id="requirementsDialog" aria-labelledby="requirementsTitle">
+  <div class="dialog-head"><h2 id="requirementsTitle">Uploaded Requirements</h2><button class="secondary" id="closeRequirements" type="button">Close</button></div>
+  <p class="dialog-copy" id="requirementsApplicant"></p>
+  <ul id="requirementsFiles" class="file-list"></ul>
+</dialog>
+
+<dialog id="messageDialog" aria-labelledby="messageTitle">
+  <form id="messageForm">
+    <div class="dialog-head"><h2 id="messageTitle">Message Applicant</h2><button class="secondary" id="closeMessage" type="button">Close</button></div>
+    <p class="dialog-copy" id="messageApplicant"></p>
+    <p class="dialog-copy">This is a one-way recruiter notification. Applicants can read the message in their private application page but cannot reply.</p>
+    <label for="messageText">Your message</label>
+    <textarea id="messageText" maxlength="2000" required placeholder="Type a message for the applicant…"></textarea>
+    <div class="dialog-actions"><button class="secondary" id="cancelMessage" type="button">Cancel</button><button id="sendMessage" class="success" type="submit">Send Message</button></div>
+  </form>
+</dialog>
+
+<script src="config.js?v=online-5"></script>
+<script src="public-online-bridge.js?v=5" data-mode="staff"></script>
 <script>
 'use strict';
 (()=>{
  const $=id=>document.getElementById(id);
  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let applications=[],selected=new URLSearchParams(location.search).get('case')||'',loading=false;
+ let applications=[],loading=false,activeApplicationId='',activeApplicantName='';
  const api=(action,data={})=>window.onlineRequest(action,data);
- function date(value,time){
+ function date(value,time=false){
    if(!value)return '—';
    const d=new Date(value);
    if(!Number.isFinite(d.getTime()))return String(value);
-   const opts=time?{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Manila'}:{dateStyle:'medium',timeZone:'Asia/Manila'};
-   return new Intl.DateTimeFormat('en-PH',opts).format(d);
+   const options=time?{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Manila'}:{dateStyle:'medium',timeZone:'Asia/Manila'};
+   return new Intl.DateTimeFormat('en-PH',options).format(d);
  }
  function appointment(value){
    if(!value)return '—';
    const raw=String(value);
    return date(raw.length===16?raw+':00+08:00':raw,true);
  }
- function stage(value){
-   if(value==='Arrived')return '<span class="badge arrived">Arrived at office</span>';
-   if(value==='Ready to book')return '<span class="badge ready">Ready to book</span>';
-   return '<span class="badge">'+esc(value||'—')+'</span>';
- }
  function setStatus(message){$('status').textContent=message||''}
  function renderList(){
-   $('listView').hidden=Boolean(selected);
-   $('detailView').hidden=!selected;
-   $('listBody').innerHTML=applications.length?applications.map(row=>{
+   const body=$('listBody');
+   body.innerHTML=applications.length?applications.map(row=>{
      const files=Array.isArray(row.files)?row.files:[];
-     const complete=row.stage==='Review'?'<button class="success" data-complete="'+esc(row.id)+'" type="button">Complete</button>':'';
-     return '<tr><td>'+esc(date(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment(row.appointment))+'</td><td>'+stage(row.stage)+'</td><td>'+files.length+' file(s)</td><td><div class="actions">'+complete+'<button class="secondary" data-view="'+esc(row.id)+'" type="button">View</button></div></td></tr>';
-   }).join(''):'<tr><td colspan="8" class="muted">No online applications yet.</td></tr>';
+     const canComplete=row.stage==='Review';
+     const completeLabel=canComplete?'Complete': 'Complete';
+     return '<tr>'+
+       '<td>'+esc(date(row.date,true))+'</td>'+
+       '<td><b>'+esc(row.number||'—')+'</b></td>'+
+       '<td><b>'+esc(row.name||'—')+'</b></td>'+
+       '<td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td>'+
+       '<td>'+esc(appointment(row.appointment))+'</td>'+
+       '<td><button class="secondary" type="button" data-requirements="'+esc(row.id)+'" '+(files.length?'':'disabled')+'>View</button><span class="file-count">'+files.length+' file(s)</span></td>'+
+       '<td><div class="row-actions"><button class="success" type="button" data-complete="'+esc(row.id)+'" '+(canComplete?'':'disabled')+'>'+completeLabel+'</button><button class="secondary" type="button" data-message="'+esc(row.id)+'" data-name="'+esc(row.name||'Applicant')+'">Message</button></div></td>'+
+       '</tr>';
+   }).join(''):'<tr><td colspan="7" class="muted">No online applications yet.</td></tr>';
  }
- async function loadList(silent){
+ async function loadList(silent=false){
    if(loading)return;
-   loading=true;if(!silent)setStatus('Refreshing Online Queue…');
+   loading=true;
+   if(!silent)setStatus('Refreshing Online Queue…');
    try{
      const result=await api('list');
      if(!Array.isArray(result))throw Error('Invalid Online Queue response.');
-     applications=result;renderList();setStatus('Live • '+applications.length+' application(s) • Synced '+new Date().toLocaleTimeString('en-PH',{timeZone:'Asia/Manila'}));
-   }catch(error){setStatus('Unable to load Online Queue: '+String(error?.message||error));}
-   finally{loading=false}
+     applications=result;
+     renderList();
+     setStatus('Live • '+applications.length+' application(s) • Synced '+new Date().toLocaleTimeString('en-PH',{timeZone:'Asia/Manila'}));
+   }catch(error){
+     setStatus('Unable to load Online Queue: '+String(error?.message||error));
+   }finally{loading=false}
  }
- async function loadDetails(){
-   if(!selected){renderList();return}
-   $('listView').hidden=true;$('detailView').hidden=false;
-   setStatus('Loading applicant details…');
-   try{
-     const state=await api('readStaff',{id:selected});
-     $('applicantName').textContent=state.name||'Applicant';
-     $('applicantStatus').innerHTML=stage(state.stage)+(state.number?' &nbsp; <b>'+esc(state.number)+'</b>':'')+(state.appointment?' &nbsp; '+esc(appointment(state.appointment)):'');
-     $('answers').innerHTML=Object.entries(state.answers||{}).map(([key,value])=>'<dt>'+esc(key)+'</dt><dd>'+esc(Array.isArray(value)?value.join('\n'):value)+'</dd>').join('');
-     const files=Array.isArray(state.files)?state.files:[];
-     $('files').innerHTML=files.length?files.map(file=>'<li><span>'+esc(file.name)+'</span><button class="secondary" data-download="'+esc(file.id)+'" type="button">Download</button></li>').join(''):'<li class="muted">No uploaded requirements.</li>';
-     $('complete').hidden=state.stage!=='Review';
-     setStatus('Applicant details loaded.');
-   }catch(error){setStatus('Unable to load applicant details: '+String(error?.message||error));}
- }
- async function complete(id){
+ async function complete(id,button){
+   if(button){button.disabled=true;button.textContent='Completing…'}
    try{
      const result=await api('complete',{id});
      if(result&&result.ok===false)throw Error(result.error||'Application could not be completed.');
-     await loadList(true);
-     if(selected)await loadDetails();
-     setStatus('Application review completed. Status: Ready to book.');
-   }catch(error){setStatus('Unable to complete application: '+String(error?.message||error));}
+     const row=applications.find(item=>item.id===id);
+     if(row)row.stage='Ready to book';
+     renderList();
+     setStatus('Application review completed. Applicant may now book an appointment.');
+   }catch(error){
+     if(button){button.disabled=false;button.textContent='Complete'}
+     setStatus('Unable to complete application: '+String(error?.message||error));
+   }
  }
- $('refresh').onclick=()=>selected?loadDetails():loadList(false);
- $('back').onclick=()=>{
-   selected='';const url=new URL(location.href);url.searchParams.delete('case');history.replaceState(null,'',url.pathname+url.search);renderList();void loadList(false);
- };
- $('complete').onclick=()=>selected&&complete(selected);
+ function openRequirements(id){
+   const row=applications.find(item=>item.id===id);
+   if(!row)return;
+   activeApplicationId=id;
+   activeApplicantName=row.name||'Applicant';
+   $('requirementsApplicant').textContent=activeApplicantName+' • Uploaded requirements';
+   const files=Array.isArray(row.files)?row.files:[];
+   $('requirementsFiles').innerHTML=files.length?files.map(file=>'<li><span>'+esc(file.name)+'</span><button class="secondary" type="button" data-download="'+esc(file.id)+'">Download</button></li>').join(''):'<li class="muted">No uploaded requirements.</li>';
+   $('requirementsDialog').showModal();
+ }
+ function openMessage(id,name){
+   activeApplicationId=id;
+   activeApplicantName=name||'Applicant';
+   $('messageApplicant').textContent='To: '+activeApplicantName;
+   $('messageText').value='';
+   $('messageDialog').showModal();
+   $('messageText').focus();
+ }
+ $('refresh').addEventListener('click',()=>void loadList(false));
  $('listBody').addEventListener('click',event=>{
    const completeButton=event.target.closest('[data-complete]');
-   const viewButton=event.target.closest('[data-view]');
-   if(completeButton){void complete(completeButton.dataset.complete);return}
-   if(viewButton){
-     selected=viewButton.dataset.view;
-     const url=new URL(location.href);url.searchParams.set('case',selected);history.replaceState(null,'',url.pathname+url.search);
-     void loadDetails();
-   }
+   const requirementsButton=event.target.closest('[data-requirements]');
+   const messageButton=event.target.closest('[data-message]');
+   if(completeButton){void complete(completeButton.dataset.complete,completeButton);return}
+   if(requirementsButton){openRequirements(requirementsButton.dataset.requirements);return}
+   if(messageButton){openMessage(messageButton.dataset.message,messageButton.dataset.name);return}
  });
- $('files').addEventListener('click',async event=>{
-   const button=event.target.closest('[data-download]');if(!button)return;
+ $('requirementsFiles').addEventListener('click',async event=>{
+   const button=event.target.closest('[data-download]');
+   if(!button)return;
    button.disabled=true;button.textContent='Downloading…';
    try{
-     const output=await api('download',{id:selected,file:button.dataset.download});
-     const blob=new Blob([Uint8Array.from(atob(output.data),x=>x.charCodeAt(0))],{type:output.mime||'application/octet-stream'});
-     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=output.name||'requirement';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-   }catch(error){setStatus('Download failed: '+String(error?.message||error));}
-   finally{button.disabled=false;button.textContent='Download'}
+     const output=await api('download',{id:activeApplicationId,file:button.dataset.download});
+     const bytes=Uint8Array.from(atob(output.data),char=>char.charCodeAt(0));
+     const blob=new Blob([bytes],{type:output.mime||'application/octet-stream'});
+     const url=URL.createObjectURL(blob),link=document.createElement('a');
+     link.href=url;link.download=output.name||'requirement';link.click();
+     setTimeout(()=>URL.revokeObjectURL(url),1000);
+   }catch(error){
+     setStatus('Download failed: '+String(error?.message||error));
+   }finally{button.disabled=false;button.textContent='Download'}
  });
- if(selected)void loadDetails();else void loadList(false);
- setInterval(()=>{if(!selected)void loadList(true)},8000);
+ $('messageForm').addEventListener('submit',async event=>{
+   event.preventDefault();
+   const message=$('messageText').value.trim();
+   if(!message){$('messageText').focus();return}
+   const button=$('sendMessage');button.disabled=true;button.textContent='Sending…';
+   try{
+     await api('sendMessage',{id:activeApplicationId,message});
+     $('messageDialog').close();
+     setStatus('Message sent to '+activeApplicantName+'. The applicant can read it but cannot reply.');
+   }catch(error){
+     setStatus('Unable to send message: '+String(error?.message||error));
+   }finally{button.disabled=false;button.textContent='Send Message'}
+ });
+ $('closeRequirements').onclick=()=>$('requirementsDialog').close();
+ $('closeMessage').onclick=()=>$('messageDialog').close();
+ $('cancelMessage').onclick=()=>$('messageDialog').close();
+ if(selectedCase()){}
+ function selectedCase(){return new URLSearchParams(location.search).get('case')||''}
+ void loadList(false);
+ setInterval(()=>void loadList(true),8000);
 })();
 </script>
 </body>
