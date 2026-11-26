@@ -35,7 +35,7 @@ dialog::backdrop{background:#092e4470}
 .dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .dialog-head h2{margin:0}
 .dialog-copy{margin:8px 0 16px}
-.file-list{display:grid;gap:9px;padding:0;list-style:none;margin:14px 0}
+.chat-thread{display:flex;flex-direction:column;gap:10px;max-height:42vh;overflow:auto;padding:12px;background:#f7fbfd;border:1px solid #d6e7ef;border-radius:10px}.chat-bubble{max-width:88%;padding:10px 12px;border-radius:12px;background:#e8f2f7;overflow-wrap:anywhere}.chat-bubble.recruiter{align-self:flex-start}.chat-bubble.applicant{align-self:flex-end;background:#087da5;color:white}.chat-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:700}.chat-meta time{font-weight:400;opacity:.8}.chat-bubble p{margin:5px 0 0;white-space:pre-wrap}.chat-top{display:flex;justify-content:space-between;align-items:center;margin:12px 0}.chat-top h3{margin:0}.file-list{display:grid;gap:9px;padding:0;list-style:none;margin:14px 0}
 .file-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #dae9f1;border-radius:8px;overflow-wrap:anywhere}
 label{display:block;font-weight:700;margin:14px 0 6px}
 textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px solid #bed8e7;border-radius:8px;padding:11px;font:inherit;color:inherit;background:#f8fcff}
@@ -70,10 +70,11 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
   <form id="messageForm">
     <div class="dialog-head"><h2 id="messageTitle">Message Applicant</h2><button class="secondary" id="closeMessage" type="button">Close</button></div>
     <p class="dialog-copy" id="messageApplicant"></p>
-    <p class="dialog-copy">This is a one-way recruiter notification. Applicants can read the message in their private application page but cannot reply.</p>
+    <div class="chat-top"><h3>Conversation</h3><button class="secondary" id="refreshMessages" type="button">Refresh messages</button></div>
+    <div class="chat-thread" id="messageThread" aria-live="polite"><p class="muted">Loading conversation…</p></div>
     <label for="messageText">Your message</label>
-    <textarea id="messageText" maxlength="2000" required placeholder="Type a message for the applicant…"></textarea>
-    <div class="dialog-actions"><button class="secondary" id="cancelMessage" type="button">Cancel</button><button id="sendMessage" class="success" type="submit">Send Message</button></div>
+    <textarea id="messageText" maxlength="2000" required placeholder="Write a message…"></textarea>
+    <div class="dialog-actions"><button class="secondary" id="cancelMessage" type="button">Close</button><button id="sendMessage" class="success" type="submit">Send Message</button></div>
   </form>
 </dialog>
 
@@ -154,13 +155,28 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
    $('requirementsFiles').innerHTML=files.length?files.map(file=>'<li><span>'+esc(file.name)+'</span><button class="secondary" type="button" data-download="'+esc(file.id)+'">Download</button></li>').join(''):'<li class="muted">No uploaded requirements.</li>';
    $('requirementsDialog').showModal();
  }
- function openMessage(id,name){
+ function renderChat(messages){
+   const thread=$('messageThread'),items=Array.isArray(messages)?messages:[];
+   thread.innerHTML=items.length?items.map(message=>{
+     const applicant=message.author==='Applicant';
+     return '<div class="chat-bubble '+(applicant?'applicant':'recruiter')+'"><div class="chat-meta"><span>'+esc(applicant?'Applicant':'Recruiter')+'</span><time>'+esc(date(message.at,true))+'</time></div><p>'+esc(message.text)+'</p></div>';
+   }).join(''):'<p class="muted">No messages yet. Start the conversation.</p>';
+   thread.scrollTop=thread.scrollHeight;
+ }
+ async function refreshConversation(){
+   if(!activeApplicationId)return;
+   const state=await api('readStaff',{id:activeApplicationId});
+   renderChat(state.messages);
+ }
+ async function openMessage(id,name){
    activeApplicationId=id;
    activeApplicantName=name||'Applicant';
-   $('messageApplicant').textContent='To: '+activeApplicantName;
+   $('messageApplicant').textContent='Conversation with '+activeApplicantName;
    $('messageText').value='';
+   $('messageThread').innerHTML='<p class="muted">Loading conversation…</p>';
    $('messageDialog').showModal();
    $('messageText').focus();
+   try{await refreshConversation()}catch(error){$('messageThread').innerHTML='<p class="muted">Unable to load messages: '+esc(error.message||error)+'</p>'}
  }
  $('refresh').addEventListener('click',()=>void loadList(false));
  $('listBody').addEventListener('click',event=>{
@@ -193,11 +209,15 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
    const button=$('sendMessage');button.disabled=true;button.textContent='Sending…';
    try{
      await api('sendMessage',{id:activeApplicationId,message});
-     $('messageDialog').close();
-     setStatus('Message sent to '+activeApplicantName+'. The applicant can read it but cannot reply.');
+     $('messageText').value='';
+     await refreshConversation();
+     setStatus('Message sent. Conversation synced for '+activeApplicantName+'.');
    }catch(error){
      setStatus('Unable to send message: '+String(error?.message||error));
    }finally{button.disabled=false;button.textContent='Send Message'}
+ });
+ $('refreshMessages').addEventListener('click',async()=>{
+   try{await refreshConversation()}catch(error){setStatus('Unable to refresh conversation: '+String(error?.message||error))}
  });
  $('closeRequirements').onclick=()=>$('requirementsDialog').close();
  $('closeMessage').onclick=()=>$('messageDialog').close();
@@ -206,6 +226,7 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
  function selectedCase(){return new URLSearchParams(location.search).get('case')||''}
  void loadList(false);
  setInterval(()=>void loadList(true),8000);
+ setInterval(()=>{if($('messageDialog').open)void refreshConversation().catch(()=>{})},8000);
 })();
 </script>
 </body>
