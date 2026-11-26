@@ -2,7 +2,10 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id),C=window.TIPON_CONFIG||{},VERSION='federation-v14',COMPATIBLE=new Set(['federation-v7','federation-v8','federation-v9','federation-v10','federation-v11','federation-v12','federation-v13','federation-v14']);
 let service='recruitment',seq=0,memberAvailable=true,servicesLoaded=false,recruitmentAvailable=false,submitting=false;
-const apiUrl=()=>new URLSearchParams(location.search).get('api')||localStorage.getItem('tqApi')||C.backendUrl||'';
+const apiUrl=()=>{
+  const candidates=[new URLSearchParams(location.search).get('api'),localStorage.getItem('tqApi'),C.backendUrl];
+  return candidates.find(value=>value&&value!==C.previousBackendUrl)||'';
+};
 function valid(url){try{const u=new URL(url);return u.origin==='https://script.google.com'&&u.pathname.endsWith('/exec')}catch{return false}}
 function message(text,ok=false){const e=$('message');e.textContent=String(text);e.className='message'+(ok?' ok':'')}
 function clear(){const e=$('message');e.textContent='';e.classList.add('hide')}

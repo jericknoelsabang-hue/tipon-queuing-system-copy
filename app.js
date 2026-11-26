@@ -40,7 +40,10 @@ try{
  }
 }catch{localTvChannel=null}
 
-function url(){return new URLSearchParams(location.search).get('api')||localStorage.getItem('tqApi')||C.backendUrl||''}
+function url(){
+  const candidates=[new URLSearchParams(location.search).get('api'),localStorage.getItem('tqApi'),C.backendUrl];
+  return candidates.find(value=>value&&value!==C.previousBackendUrl)||'';
+}
 function valid(u){try{const p=new URL(u);return p.origin==='https://script.google.com'&&p.pathname.endsWith('/exec')}catch{return false}}
 function normalizeAssignment(value){
  if(value===undefined||value===null||value==='')return 'ALL';
