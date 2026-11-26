@@ -13,6 +13,8 @@ main{max-width:870px;margin:auto;padding:24px}
 main.staff{max-width:1400px}
 h1{font-size:clamp(26px,5vw,42px);margin:.2em 0 .6em;text-align:center}
 section,fieldset{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:18px;margin:16px 0}
+.chat-card{margin-top:20px;padding-top:18px;border-top:1px solid #d8e8f0}.chat-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.chat-heading h3{margin:0}.chat-thread{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow:auto;padding:12px;margin:12px 0;background:#f7fbfd;border:1px solid #d6e7ef;border-radius:10px}.chat-bubble{max-width:88%;padding:10px 12px;border-radius:12px;background:#e8f2f7;overflow-wrap:anywhere}.chat-bubble.recruiter{align-self:flex-start}.chat-bubble.applicant{align-self:flex-end;background:#087da5;color:white}.chat-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;font-weight:700}.chat-meta time{font-weight:400;opacity:.8}.chat-bubble p{margin:5px 0 0;white-space:pre-wrap}.chat-compose{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}.chat-compose label{margin:0}.chat-compose textarea{min-height:64px}.chat-compose button{height:44px;white-space:nowrap}
+@media(max-width:600px){.chat-compose{grid-template-columns:1fr}.chat-compose button{width:100%}}
 legend{font-size:clamp(17px,2.4vw,21px);font-weight:750;padding:0 9px;max-width:100%}
 .grid{display:grid;gap:16px}
 .form-row{display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));align-items:end;gap:14px}
@@ -223,13 +225,13 @@ async function conversation(){
   const state=await api('read');
   const controls='<p>Save <a href="'+esc(new URL('online.html?case='+token,location.href).href)+'">your private application link</a> to check your application status.</p>';
   const notices=Array.isArray(state.messages)?state.messages:[];
-  const noticeBlock=notices.length?'<section class="recruiter-notices"><h3>Recruiter Messages</h3><ul>'+notices.map(message=>'<li><strong>Recruiter</strong><p>'+esc(message.text)+'</p><small>'+esc(message.at)+'</small></li>').join('')+'</ul><p><small>These are one-way updates. Replies are not available here.</small></p></section>':'';
+  const chatBlock='<section class="chat-card"><div class="chat-heading"><h3>Conversation</h3><button class="secondary" type="button" data-refresh-chat>Refresh messages</button></div><div class="chat-thread" aria-live="polite">'+(notices.length?notices.map(message=>{const applicant=message.author==='Applicant';return '<div class="chat-bubble '+(applicant?'applicant':'recruiter')+'"><div class="chat-meta"><span>'+esc(applicant?'You':'Recruiter')+'</span><time>'+esc(message.at)+'</time></div><p>'+esc(message.text)+'</p></div>'}).join(''):'<p class="muted">No messages yet. You can message your recruiter here.</p>')+'</div><form class="chat-compose" data-action="sendApplicantMessage"><label for="applicantMessage">Your message<textarea id="applicantMessage" name="message" maxlength="2000" required placeholder="Write a message to your recruiter…"></textarea></label><button type="submit">Send message</button></form></section>';
   let process='';
   if(state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
   if(state.stage==='Review')process=form('upload',docs,'Upload additional documents');
   if(state.stage==='Booked')process+=arrivalControls(state.appointment);
   if(state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+noticeBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+chatBlock+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+esc(f.name)+'</li>').join('')+'</ul>'+process+'</section>';
 }
 function arrivalControls(appointment){
   const date=appointment?.slice(0,10);
@@ -332,9 +334,14 @@ root.addEventListener('submit',e=>{
 });
 root.addEventListener('click',e=>{
   if(e.target.closest('button[data-queue-done]')){confirmedTicket=null;run(render);}
+  if(e.target.closest('button[data-refresh-chat]'))run(render);
 });
 if(init.view==='onsite')document.getElementById('heading').textContent='Office check-in';
 run(render);
+setInterval(()=>{
+  const composer=root.querySelector('form[data-action="sendApplicantMessage"]');
+  if(token&&!running&&!document.hidden&&!(composer&&composer.contains(document.activeElement)))run(render);
+},10000);
 </script>
 </body>
 </html>
