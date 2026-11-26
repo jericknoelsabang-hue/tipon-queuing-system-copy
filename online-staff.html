@@ -238,8 +238,8 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
  if(selectedCase()){}
  function selectedCase(){return new URLSearchParams(location.search).get('case')||''}
  void loadList(false);
- setInterval(()=>void loadList(true),8000);
- setInterval(()=>{if($('messageDialog').open)void refreshConversation().catch(()=>{})},8000);
+ setInterval(()=>void loadList(true),5000);
+ setInterval(()=>{if($('messageDialog').open)void refreshConversation().catch(()=>{})},5000);
 })();
 </script>
 </body>
