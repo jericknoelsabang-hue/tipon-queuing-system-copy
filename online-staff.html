@@ -9,98 +9,28 @@
 *{box-sizing:border-box}
 body{margin:0}
 header{background:white;border-top:6px solid #f6b642;text-align:center;padding:22px;font-size:24px;font-weight:800}
-main{max-width:870px;margin:auto;padding:24px}
-main.staff{max-width:1400px}
-h1{font-size:clamp(26px,5vw,42px);margin:.2em 0 .6em}
-section,fieldset{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:18px;margin:16px 0}
-legend{font-weight:750;padding:0 9px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
-label{display:grid;gap:5px;font-size:14px;font-weight:650}
-label.choice{display:flex;align-items:center;font-weight:400}
-input,textarea,select,button{font:inherit;border-radius:8px;border:1px solid #bed8e7;padding:9px;min-width:0}
-input,textarea,select{width:100%;background:#f8fcff;color:inherit}
-input[type=checkbox]{width:auto}
-button{cursor:pointer;color:white;background:#0879a4;border-color:#0879a4;font-weight:700}
-button:disabled{opacity:.55;cursor:default}
-a{color:#075477}
-table{width:100%;border-collapse:collapse}
-th,td{padding:11px;text-align:left;border-bottom:1px solid #dae9f1;vertical-align:top}
-th{background:#eef6fa}
-.scroll{overflow:auto}
-.actions{display:flex;gap:8px;flex-wrap:wrap}
-.message{overflow-wrap:anywhere;white-space:pre-wrap;background:#eef6fa;padding:10px;border-radius:7px}
-#notice{color:#8c2a25}
-small{font-weight:400}
-[hidden]{display:none!important}
+main{max-width:760px;margin:42px auto;padding:24px}
+section{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:24px}
+h1{font-size:clamp(26px,5vw,38px);margin:0 0 12px}
+a{display:inline-block;margin-top:12px;padding:10px 16px;border-radius:8px;background:#0879a4;color:white;font-weight:700;text-decoration:none}
+#status{color:#456477}
 </style>
-<link rel="stylesheet" href="online-chat.css?v=1">
 </head>
-<body><header>tipón · TAWAG</header>
-<main class="staff"><h1>Online Queue</h1><p><a href="./?view=staff">Back to Staff Console</a></p><p id="signIn" hidden><a id="directLogin" target="_blank" rel="noopener">Open the TIPON Workspace sign-in</a> for direct access if the connection is blocked.</p><p id="notice" role="status"></p><p><button id="connectWorkspace" type="button">Connect TIPON Workspace</button></p><div id="screen"></div></main>
-<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=5" data-mode="staff"></script><script src="online-chat.js?v=1"></script>
+<body>
+<header>tipón · TAWAG</header>
+<main><section>
+<h1>Online Queue</h1>
+<p id="status">Opening the secure TIPON Workspace Online Queue…</p>
+<a id="openQueue" href="#">Open Online Queue</a>
+</section></main>
+<script src="config.js?v=online-3"></script>
 <script>
-const root=document.getElementById('screen'),notice=document.getElementById('notice');
-let selected='',running=false;
-const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const api=(action,data={})=>onlineRequest(action,{id:selected,...data});
-const transaction=value=>value==='NH'?'New Hire':'Rehire';
-const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p><button>'+label+'</button></p></form>';
-const download=(file)=>'<button type="button" data-file="'+esc(file.id)+'">'+esc(file.name)+'</button>';
-async function staff(){
-  const [list,onsite]=await Promise.all([api('list'),api('onsiteLink')]);
-  root.innerHTML='<section><div class="actions"><button type="button" data-refresh>Refresh</button><a href="'+esc(onsite)+'">Office check-in link for onsite QR</a></div><div class="scroll"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Action</th><th>Uploaded files</th></tr></thead><tbody>'+list.map(row=>'<tr><td>'+esc(row.date?new Date(row.date).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}):'')+'</td><td>'+esc(row.number||'—')+'<br><small>'+esc(row.stage==='Arrived'?'Arrived at office':row.stage)+(row.appointment?'<br>'+esc(row.appointment.replace('T',' ')+' PHT'):'')+'</small></td><td>'+esc(row.name)+'</td><td>'+transaction(row.transaction)+'</td><td><div class="actions"><button type="button" data-complete="'+esc(row.id)+'" '+(row.stage==='Review'?'':'disabled')+'>Complete</button><button type="button" data-chat="'+esc(row.id)+'">'+(row.number?'View':'Message')+'</button></div></td><td><div class="actions">'+row.files.map(file=>'<button type="button" data-file="'+esc(file.id)+'" data-case="'+esc(row.id)+'">'+esc(file.name)+'</button>').join('')+'</div></td></tr>').join('')+(list.length?'':'<tr><td colspan="6">No online applications yet.</td></tr>')+'</tbody></table></div></section>';
-}
-async function conversation(){
-  const state=await api('readStaff');
-  const draft=onlineChat.draft(root);
-  const controls='<button type="button" data-back>Back to Online Queue</button>';
-  const profile='<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(value)+'</dd>').join('')+'</dl></details>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+download(f)+'</li>').join('')+'</ul>'+'</section>'+(state.number?'':onlineChat.markup(state.messages,'Recruiter','staffChat',draft));
-  onlineChat.scroll(root);
-}
-
-const render=()=>selected?conversation():staff();
-async function run(task){
-  if(running)return;
-  running=true;root.inert=true;notice.textContent='Loading Online Queue…';
-  try{await task();notice.textContent='';document.getElementById('signIn').hidden=true;window.focus();}
-  catch(error){
-    notice.textContent=error.message||String(error);
-    if(!bridgeWindow||/authorized|sign in|timed out/i.test(notice.textContent)){
-      const url=new URL(window.TIPON_CONFIG.onlineStaffBackendUrl);
-      url.searchParams.set('online','staff');
-      document.getElementById('directLogin').href=url.href;
-      document.getElementById('signIn').hidden=false;
-    }
-  }finally{running=false;root.inert=false;}
-}
-root.addEventListener('submit',event=>{
-  event.preventDefault();
-  run(async()=>{await api('staffChat',Object.fromEntries(new FormData(event.target)));event.target.reset();await render();});
-});
-root.addEventListener('click',e=>{
-  const button=e.target.closest('button');
-  if(!button||button.type!=='button')return;
-  const d=button.dataset;
-  run(async()=>{
-    if(d.file){
-      const output=await api('download',{id:d.case||selected,file:d.file});
-      const blob=new Blob([Uint8Array.from(atob(output.data),x=>x.charCodeAt(0))],{type:output.mime});
-      const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=output.name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);return;
-    }
-    if(d.complete)await api('complete',{id:d.complete});
-    if(d.chat){selected=d.chat;root.querySelector('.chat-composer')?.reset();}
-    if('back' in d)selected='';
-    await render();
-  });
-});
-
-document.getElementById('connectWorkspace').addEventListener('click',event=>{
-  if(!openWorkspaceConnection()){
-    notice.textContent='Allow the Google Workspace pop-up, then try again.';
-    return;
-  }
-  event.currentTarget.disabled=true;
-  run(render);
-});
-</script></body></html>
+(()=>{
+  const target=new URL(window.TIPON_CONFIG.onlineStaffBackendUrl);
+  target.searchParams.set('online','staff');
+  document.getElementById('openQueue').href=target.href;
+  window.location.replace(target.href);
+})();
+</script>
+</body>
+</html>
