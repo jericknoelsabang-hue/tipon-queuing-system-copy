@@ -33,10 +33,12 @@ th{background:#eef6fa}
 small{font-weight:400}
 [hidden]{display:none!important}
 </style>
+<link rel="stylesheet" href="online-chat.css?v=1">
 </head>
 <body><header>tipón · TAWAG</header>
 <main class="staff"><h1>Online Queue</h1><p><a href="./?view=staff">Back to Staff Console</a></p><p id="signIn" hidden><a id="directLogin" target="_blank" rel="noopener">Open the TIPON Workspace sign-in</a> for direct access if the connection is blocked.</p><p id="notice" role="status"></p><p><button id="connectWorkspace" type="button">Connect TIPON Workspace</button></p><div id="screen"></div></main>
-<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=4" data-mode="staff"></script><script>
+<script src="config.js?v=online-2"></script><script src="public-online-bridge.js?v=4" data-mode="staff"></script><script src="online-chat.js?v=1"></script>
+<script>
 const root=document.getElementById('screen'),notice=document.getElementById('notice');
 let selected='',running=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -50,10 +52,11 @@ async function staff(){
 }
 async function conversation(){
   const state=await api('readStaff');
-  const refresh='<button type="button" data-refresh>Refresh messages</button>';
+  const draft=onlineChat.draft(root);
   const controls='<button type="button" data-back>Back to Online Queue</button>';
   const profile='<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(value)+'</dd>').join('')+'</dl></details>';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+download(f)+'</li>').join('')+'</ul>'+'</section><section><h2>Conversation</h2>'+refresh+state.messages.map(m=>'<p class="message"><strong>'+esc(m.author)+'</strong><br>'+esc(m.text)+'</p>').join('')+form('staffChat','<label>Your message<textarea name="message" maxlength="2000" required></textarea></label>','Send message')+'</section>';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+download(f)+'</li>').join('')+'</ul>'+'</section>'+onlineChat.markup(state.messages,'Recruiter','staffChat',draft);
+  onlineChat.scroll(root);
 }
 
 const render=()=>selected?conversation():staff();
@@ -73,7 +76,7 @@ async function run(task){
 }
 root.addEventListener('submit',event=>{
   event.preventDefault();
-  run(async()=>{await api('staffChat',Object.fromEntries(new FormData(event.target)));await render();});
+  run(async()=>{await api('staffChat',Object.fromEntries(new FormData(event.target)));event.target.reset();await render();});
 });
 root.addEventListener('click',e=>{
   const button=e.target.closest('button');
@@ -86,7 +89,7 @@ root.addEventListener('click',e=>{
       const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=output.name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);return;
     }
     if(d.complete)await api('complete',{id:d.complete});
-    if(d.chat)selected=d.chat;
+    if(d.chat){selected=d.chat;root.querySelector('.chat-composer')?.reset();}
     if('back' in d)selected='';
     await render();
   });
