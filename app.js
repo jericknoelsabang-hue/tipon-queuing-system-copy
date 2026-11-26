@@ -390,12 +390,14 @@ function staff(){
   const donePrecheckTitle=!t?'Call a queue in Pre Checking first.':hasAvailableDestination?'A destination window is available. Transfer the ticket directly.':!connectionHealthy?'Connect to Apps Script to update the queue.':!PRECHECK_TRANSFER_VERSIONS.has(S.version)?'Deploy Federation v13 Apps Script.':'Save this checked ticket to Done Pre-check until a matching window becomes available.';
   const completePrecheckDisabled=!t||!connectionHealthy||S.version!==REQUIRED||activeWindowActions.has(String(i));
   const completePrecheckTitle=!t?'Call a queue in Pre Checking first.':!connectionHealthy?'Connect to Apps Script to update the queue.':S.version!==REQUIRED?'Deploy Federation v14 Apps Script to enable direct completion.':'Complete the queue directly from Pre Checking without transferring it to another window.';
+  const tiponVisible=!prechecking&&tiponAssignedWindow(selected),tiponEnabled=Boolean(t&&tiponEligibleTransaction(t)&&connectionHealthy&&!activeWindowActions.has(String(i)));
+  const tiponButton=tiponVisible?'<button class="btn ghost" data-action="tiponForm" data-win="'+i+'" type="button"'+(tiponEnabled?'':' disabled')+' title="'+esc(tiponEnabled?'Open the Tipon applicant information form.':!t?'Call a New Hire, Rehire, or Transfer queue first.':'Available for New Hire, Rehire, and Transfer tickets only.')+'">Tipon Form</button>':'';
   $('staffWins').innerHTML='<div class="window-grid"><div class="window-card"><div class="split"><h3>Window '+i+'</h3><span class="pill">'+esc(txName)+'</span></div>'+
     '<div class="current">'+(t?'<b class="current-no">'+esc(t.queueNo)+'</b><strong>'+esc(t.name)+'</strong><small>'+esc(t.transactionName)+'</small>':'<small class="muted">No active applicant or member</small>')+'</div>'+
     '<p class="recruiter-label"><b>Recruiter:</b> '+esc(recruiter)+'</p>'+
     '<div class="window-actions '+(prechecking?'prechecking':'standard')+'"><button class="btn primary" data-action="call" data-win="'+i+'" type="button"'+(callNextDisabled?' disabled':'')+(callNextTitle?' title="'+esc(callNextTitle)+'"':'')+'>Call Next</button>'+
     '<button class="btn ghost" data-action="recall" data-win="'+i+'" type="button"'+(!t||!connectionHealthy?' disabled':'')+'>Recall</button>'+
-    (prechecking?'<button class="btn success" data-action="donePrecheck" data-win="'+i+'" type="button"'+(donePrecheckDisabled?' disabled':'')+' title="'+esc(donePrecheckTitle)+'">Done Pre-check</button><button class="btn success" data-action="completePrecheck" data-win="'+i+'" type="button"'+(completePrecheckDisabled?' disabled':'')+' title="'+esc(completePrecheckTitle)+'">Complete</button>':'<button class="btn success" data-action="complete" data-win="'+i+'" type="button"'+(!t||!connectionHealthy?' disabled':'')+'>Complete</button>')+'</div>'+
+    (prechecking?'<button class="btn success" data-action="donePrecheck" data-win="'+i+'" type="button"'+(donePrecheckDisabled?' disabled':'')+' title="'+esc(donePrecheckTitle)+'">Done Pre-check</button><button class="btn success" data-action="completePrecheck" data-win="'+i+'" type="button"'+(completePrecheckDisabled?' disabled':'')+' title="'+esc(completePrecheckTitle)+'">Complete</button>':'<button class="btn success" data-action="complete" data-win="'+i+'" type="button"'+(!t||!connectionHealthy?' disabled':'')+'>Complete</button>')+tiponButton+'</div>'+
     (prechecking?transferPanel+remarksPanel:remarksPanel)+'</div></div>';
   document.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>queueAction(button.dataset.action,+button.dataset.win));
   const remarksInput=$('windowRemarks');
@@ -670,7 +672,71 @@ function queueRemarksSave(i,ticketId,value){
  });
  return remarksSaveQueue;
 }
+let tiponFormWindow=0,tiponFormTicket=null,tiponFormBusy=false,tiponPhotoData='',tiponSignatureDirty=false,tiponSignatureDrawing=false;
+function tiponEligibleTransaction(ticket){const code=String(ticket?.transaction||'').toUpperCase(),number=String(ticket?.queueNo||'').toUpperCase();return ['NH','RH','TR'].includes(code)||/^OL(?:NH|RH)\d/.test(number)}
+function tiponAssignedWindow(value){const list=assignmentList(value);return list!=='ALL'&&list.some(code=>['NH','RH','TR'].includes(String(code).toUpperCase()))}
+function tiponStatus(message,error=false){const el=$('tiponFormStatus');if(!el)return;el.textContent=message;el.classList.remove('hide');el.classList.toggle('err',error)}
+function tiponRenderFields(fields,answers){
+ const host=$('tiponFormFields');if(!host)return;
+ host.innerHTML=(fields||[]).map(field=>{
+  if(!field.id)return '<div class="tipon-section">'+esc(field.title)+'</div>';
+  const value=answers?.[field.title],required=field.required?' required':'',star=field.required?' <span class="required-star">*</span>':'';
+  let control='';
+  if(field.type==='LIST'||field.type==='MULTIPLE_CHOICE'){
+   control='<select name="tipon_'+esc(field.id)+'" data-tipon-title="'+esc(field.title)+'"'+required+'><option value="">Select an option</option>'+(field.choices||[]).map(choice=>'<option value="'+esc(choice)+'"'+(String(value||'')===String(choice)?' selected':'')+'>'+esc(choice)+'</option>').join('')+(field.other?'<option value="__OTHER__"'+(value&&!field.choices.includes(value)?' selected':'')+'>Other</option>':'')+'</select>'+(field.other?'<input class="tipon-other" data-tipon-other="'+esc(field.id)+'" placeholder="Please specify" value="'+(value&&!field.choices.includes(value)?esc(value):'')+'" '+(value&&!field.choices.includes(value)?'':'hidden')+'>':'');
+  }else if(field.type==='CHECKBOX'){
+   const selected=Array.isArray(value)?value:value?[value]:[];
+   control='<div class="tipon-choice-list">'+(field.choices||[]).map(choice=>'<label><input type="checkbox" data-tipon-title="'+esc(field.title)+'" value="'+esc(choice)+'"'+(selected.includes(choice)?' checked':'')+'> '+esc(choice)+'</label>').join('')+(field.other?'<label><input type="checkbox" data-tipon-other-check="'+esc(field.id)+'" '+(selected.some(x=>!field.choices.includes(x))?'checked':'')+'> Other</label><input class="tipon-other" data-tipon-other="'+esc(field.id)+'" placeholder="Please specify" value="'+esc(selected.find(x=>!field.choices.includes(x))||'')+'" '+(selected.some(x=>!field.choices.includes(x))?'':'hidden')+'>':'')+'</div>';
+  }else{const type=field.type==='DATE'?'date':field.type==='TIME'?'time':field.type==='DATETIME'?'datetime-local':'text';control=field.type==='PARAGRAPH_TEXT'?'<textarea data-tipon-title="'+esc(field.title)+'" rows="3"'+required+'>'+esc(value||'')+'</textarea>':'<input type="'+type+'" data-tipon-title="'+esc(field.title)+'" value="'+esc(value||'')+'"'+required+'>'}
+  return '<label class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+'"><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</label>';
+ }).join('');
+ host.querySelectorAll('select').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]');if(other){other.hidden=el.value!=='__OTHER__';if(el.value!=='__OTHER__')other.value=''}});
+ host.querySelectorAll('[data-tipon-other-check]').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]');if(other)other.hidden=!el.checked});
+}
+async function openTiponForm(i){
+ const ticket=win(i);if(!tiponAssignedWindow(S.assignments?.[String(i)]||'ALL')){staffMessage('Tipon Form is available only for windows assigned to New Hire, Rehire, or Transfer.','err');return}
+ if(!ticket||!tiponEligibleTransaction(ticket)){staffMessage('Call a New Hire, Rehire, or Transfer queue first to open the Tipon Form.','err');return}
+ if(!connectionHealthy||typeof window.onlineRequest!=='function'){staffMessage('Connect to the Online Queue Apps Script before opening Tipon Form.','err');return}
+ tiponFormWindow=Number(i);tiponFormTicket={...ticket};tiponFormBusy=true;
+ const dialog=$('tiponFormDialog');if(!dialog){staffMessage('Tipon Form panel is missing. Refresh the page.','err');tiponFormBusy=false;return}
+ $('tiponFormIdentity').textContent=(ticket.name||'Applicant')+' · '+(ticket.queueNo||'')+' · '+(ticket.transactionName||ticket.transaction||'');
+ $('tiponFormFields').innerHTML='<p class="small-muted">Loading applicant information…</p>';$('tiponFormSave').disabled=true;$('tiponFormStatus').classList.add('hide');$('tiponPhotoFile').value='';$('tiponPhotoPreview').hidden=true;tiponPhotoData='';tiponSignatureDirty=false;
+ const canvas=$('tiponSignaturePad');canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);$('tiponSignatureSaved').textContent='';
+ if(!dialog.open)dialog.showModal();
+ try{const result=await window.onlineRequest('getTiponForm',{id:ticket.ticketId,window:i});if(!result||!Array.isArray(result.fields))throw Error('Apps Script returned an invalid Tipon Form.');
+  tiponRenderFields(result.fields,result.answers||{});$('tiponFormIdentity').textContent=(result.name||ticket.name||'Applicant')+' · '+(result.queueNo||ticket.queueNo||'')+' · '+(result.transaction||ticket.transaction||'');
+  tiponFormTicket.photoUrl=result.answers?.['Photo URL']||'';tiponFormTicket.signatureUrl=result.answers?.['Signature URL']||'';
+  if(tiponFormTicket.photoUrl)$('tiponPhotoSaved').textContent='Existing photo saved. Choose a new photo to replace it.';
+  if(tiponFormTicket.signatureUrl)$('tiponSignatureSaved').textContent='Existing signature saved. Draw again to replace it.';
+  $('tiponFormSave').disabled=false;
+ }catch(error){tiponStatus(String(error?.message||error||'Unable to load Tipon Form.'),true)}finally{tiponFormBusy=false}
+}
+function tiponCollectAnswers(){
+ const host=$('tiponFormFields'),answers={};
+ host.querySelectorAll('[data-tipon-title]').forEach(el=>{const title=el.dataset.tiponTitle;if(el.type==='checkbox'){if(el.checked)(answers[title]||=[]).push(el.value)}else if(el.tagName==='SELECT'&&el.value==='__OTHER__'){answers[title]=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]')?.value.trim()||''}else answers[title]=el.value.trim()});
+ host.querySelectorAll('[data-tipon-other-check]:checked').forEach(el=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]'),box=host.querySelector('[data-tipon-title]');const title=box?.dataset.tiponTitle;if(title&&other?.value.trim())(answers[title]||=[]).push(other.value.trim())});
+ return answers;
+}
+function tiponBindDialog(){
+ const form=$('tiponRecruitmentForm'),dialog=$('tiponFormDialog'),canvas=$('tiponSignaturePad');if(!form||form.dataset.bound)return;form.dataset.bound='1';
+ $('tiponFormClose').onclick=$('tiponFormCancel').onclick=()=>dialog.close();
+ $('clearTiponSignature').onclick=()=>{canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);tiponSignatureDirty=true;$('tiponSignatureSaved').textContent='Draw a new signature before saving.'};
+ const point=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height}};
+ canvas.onpointerdown=e=>{tiponSignatureDrawing=true;canvas.setPointerCapture(e.pointerId);const p=point(e),ctx=canvas.getContext('2d');ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';tiponSignatureDirty=true};
+ canvas.onpointermove=e=>{if(tiponSignatureDrawing){const p=point(e),ctx=canvas.getContext('2d');ctx.lineTo(p.x,p.y);ctx.stroke()}};
+ ['pointerup','pointercancel','lostpointercapture'].forEach(name=>canvas.addEventListener(name,()=>tiponSignatureDrawing=false));
+ $('tiponPhotoFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;if(!/^image\/(jpeg|png)$/.test(file.type)){tiponStatus('Choose a JPEG or PNG photo.',true);e.target.value='';return}
+  try{const image=new Image(),url=URL.createObjectURL(file);image.src=url;await image.decode();const scale=Math.min(1,1200/Math.max(image.width,image.height)),out=document.createElement('canvas');out.width=Math.round(image.width*scale);out.height=Math.round(image.height*scale);out.getContext('2d').drawImage(image,0,0,out.width,out.height);tiponPhotoData=out.toDataURL('image/jpeg',.82);$('tiponPhotoPreview').src=tiponPhotoData;$('tiponPhotoPreview').hidden=false;$('tiponPhotoSaved').textContent='New photo ready to save.';URL.revokeObjectURL(url)}catch(error){tiponStatus('Could not read the selected photo.',true)}};
+ form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;if(!form.reportValidity())return;
+  const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture or choose the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
+  tiponFormBusy=true;$('tiponFormSave').disabled=true;tiponStatus('Saving Tipon Form to ONLINE_APPLICATIONS…');
+  try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
+  catch(error){tiponStatus(String(error?.message||error||'Unable to save Tipon Form.'),true)}finally{tiponFormBusy=false;$('tiponFormSave').disabled=false}
+ };
+}
+
 async function queueAction(action,i){
+ if(action==='tiponForm'){await openTiponForm(i);return}
  if(action==='complete'&&isPrecheckingWindow(i)){staffMessage('Pre Checking tickets must be transferred to an available service window.','err');return}
  if(action==='donePrecheck'&&!isPrecheckingWindow(i)){staffMessage('Done Pre-check is only available in a Pre Checking window.','err');return}
   if(action==='completePrecheck'&&!isPrecheckingWindow(i)){staffMessage('Complete from Pre Checking is only available in a Pre Checking window.','err');return}
@@ -1006,6 +1072,7 @@ $('onlineQueueBody').addEventListener('click',event=>{
     window.open(detailUrl.href,'_blank','noopener');
   }
 });
+tiponBindDialog();
 const full=$('fullscreen');
 function reflect(){full.setAttribute('aria-pressed',document.fullscreenElement===$('display')?'true':'false')}
 full.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('display').requestFullscreen()}catch(e){error(e,true)}};
