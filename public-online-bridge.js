@@ -5,6 +5,8 @@ const onlineBackend=new URL(window.TIPON_CONFIG.onlineBackendUrl);
 const pendingOnline=new Map();
 let bridgeWindow, bridgeSourceOrigin, acceptBridge, rejectBridge;
 const bridgeReady=new Promise((resolve,reject)=>{acceptBridge=resolve;rejectBridge=reject;});
+// Rendering the form no longer waits for this connection. A later submission still needs it.
+bridgeReady.catch(()=>{});
 const bridgeDeadline=setTimeout(()=>rejectBridge(Error('Online Queue connection timed out. Reload this page to retry.')),30000);
 window.addEventListener('message',event=>{
   const data=event.data;

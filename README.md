@@ -103,3 +103,5 @@ The Online Queue has its own applicant page and a Google-authenticated recruiter
 5. Open the recruiter table and encode its **Office check-in link for onsite QR** into the QR displayed at the office. Post the applicant link separately.
 
 New Hire and Rehire use one sequence across dates. Applicants receive a private chat link after submitting the AP CONS fields and PDF/JPEG requirements. **Complete** enables scheduling. **Get Queue** allocates the number, such as `OLNH-000001` or `OLRH-000002`. The office QR checks the scheduled date and activates the existing waiting-queue ticket exactly once per application. The screenshot's private reviewer table opens from the Online Queue card on the Apps Script domain so the recruiter identity and document access can be checked at the server.
+
+The GitHub Pages applicant form includes a snapshot of the public AP CONS question definitions for immediate display. Refresh that snapshot when the source form questions change. Apps Script validates submissions against the current source form and continues to manage queue records and files.
