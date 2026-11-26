@@ -34,6 +34,9 @@ textarea{resize:vertical}
 .file-picker-name{min-width:0;overflow-wrap:anywhere}
 input[type=file]{max-width:100%}
 .required{color:#bd2031}
+.field-invalid input:not([type=checkbox]),.field-invalid select,.field-invalid textarea,.field-invalid .file-picker{border-color:#d93025!important;background:#fff7f6!important;box-shadow:0 0 0 1px #d93025}
+.field-invalid .choice input[type=checkbox]{outline:2px solid #d93025;outline-offset:2px}
+.field-invalid>span:first-child,.field-invalid>strong{color:#b3261e}
 .submit-row,.certification{text-align:center}
 .certification label.choice{justify-content:center;align-items:flex-start;max-width:660px;margin:8px auto 0}
 .certification span{line-height:1.55}
@@ -76,7 +79,7 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const api=(action,data={})=>onlineRequest(action,{token,site:init.site,...data});
 const star='<span class="required" aria-label="required">*</span>';
 const marked=(value,required)=>esc(value)+(required?' '+star:'');
-const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p'+(action==='submit'?' class="submit-row"':'')+'><button'+(action==='submit'?' disabled':'')+'>'+label+'</button></p></form>';
+const form=(action,contents,label)=>'<form data-action="'+action+'"'+(action==='submit'?' novalidate':'')+'>'+contents+'<p'+(action==='submit'?' class="submit-row"':'')+'><button type="submit">'+label+'</button></p></form>';
 const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label.replace(/ \*$/,''))+(label.endsWith(' *')?' '+star:'')+'</span><input name="'+name+'" type="'+type+'" '+attrs+'></label>';
 const docs='<label><span>Upload Pre-Requirements Documents (PDF or JPEG) '+star+'</span><span class="file-picker"><input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><span class="file-picker-button" aria-hidden="true">Choose Files</span><span class="file-picker-name" aria-live="polite">No file chosen</span></span><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
 const filesToData=async files=>{
@@ -151,11 +154,59 @@ function syncApplication(form){
     }
   }
   form.querySelectorAll('.form-row').forEach(row=>{row.hidden=Array.from(row.children).every(child=>child.hidden);});
-  const requiredFilled=Array.from(form.elements).every(n=>!n.required||n.disabled||
-    (n.type==='checkbox'?n.checked:n.type==='file'?n.files.length>0:Boolean(n.value.trim())));
-  const requiredChoices=fields.filter(q=>q.required&&q.type==='CHECKBOX').every(q=>
-    Array.from(form.querySelectorAll('[name="q'+q.id+'"]:checked')).length>0);
-  form.querySelector('button[type="submit"], .submit-row button').disabled=!(requiredFilled&&requiredChoices&&form.checkValidity());
+  const submitButton=form.querySelector('button[type="submit"], .submit-row button');
+  if(submitButton)submitButton.disabled=false;
+}
+function markInvalid(wrapper,control){
+  if(wrapper)wrapper.classList.add('field-invalid');
+  if(control)control.setAttribute('aria-invalid','true');
+}
+function clearInvalidControl(control){
+  if(!control)return;
+  const wrapper=control.closest('.question')||control.closest('label');
+  if(!wrapper)return;
+  const group=wrapper.dataset.id?fields.find(item=>item.id===wrapper.dataset.id):null;
+  let valid;
+  if(group?.type==='CHECKBOX'){
+    valid=wrapper.querySelectorAll('input[type="checkbox"]:checked').length>0;
+  }else{
+    const controls=Array.from(wrapper.querySelectorAll('input,select,textarea')).filter(item=>!item.disabled);
+    valid=controls.every(item=>item.validity.valid);
+  }
+  if(valid){
+    wrapper.classList.remove('field-invalid');
+    wrapper.querySelectorAll('[aria-invalid="true"]').forEach(item=>item.removeAttribute('aria-invalid'));
+  }
+  if(!root.querySelector('.field-invalid'))notice.textContent='';
+}
+function validateApplication(form){
+  form.querySelectorAll('.field-invalid').forEach(node=>node.classList.remove('field-invalid'));
+  form.querySelectorAll('[aria-invalid="true"]').forEach(node=>node.removeAttribute('aria-invalid'));
+  const invalid=[];
+  const controls=Array.from(form.querySelectorAll('input,select,textarea')).filter(control=>!control.disabled);
+  for(const control of controls){
+    if(!control.validity.valid){
+      const wrapper=control.closest('.question')||control.closest('label')||control.parentElement;
+      markInvalid(wrapper,control);
+      invalid.push({wrapper,control});
+    }
+  }
+  for(const question of fields.filter(item=>item.required&&item.type==='CHECKBOX')){
+    const wrapper=form.querySelector('[data-id="'+question.id+'"]');
+    if(wrapper&&!wrapper.querySelector('input[type="checkbox"]:checked')){
+      markInvalid(wrapper,wrapper.querySelector('input[type="checkbox"]'));
+      invalid.push({wrapper,control:wrapper.querySelector('input[type="checkbox"]')});
+    }
+  }
+  if(invalid.length){
+    notice.textContent='Please complete all required fields highlighted in red.';
+    const first=invalid[0];
+    first.wrapper?.scrollIntoView({behavior:'smooth',block:'center'});
+    first.control?.focus({preventScroll:true});
+    return false;
+  }
+  notice.textContent='';
+  return true;
 }
 function intake(){
   fields=JSON.parse(document.getElementById('recruitment-fields').textContent);
@@ -165,7 +216,7 @@ function intake(){
     else groups.at(-1).items.push(q);
   }
   const blocks=groups.filter(g=>g.items.length).map(g=>'<fieldset><legend>'+esc(g.title)+'</legend><div class="grid">'+sectionLayout(g)+'</div></fieldset>').join('');
-  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction '+star+'</legend><div class="grid"><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label>'+field('email','Email *','email','maxlength="254" required')+'</div></fieldset>'+instructions+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
+  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction '+star+'</legend><div class="grid"><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label></div></fieldset>'+instructions+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
   syncApplication(root.querySelector('form'));
 }
 async function conversation(){
@@ -224,7 +275,10 @@ async function run(task){
   }
   finally{running=false;root.inert=false;}
 }
-root.addEventListener('input',e=>syncApplication(e.target.form));
+root.addEventListener('input',e=>{
+  syncApplication(e.target.form);
+  clearInvalidControl(e.target);
+});
 root.addEventListener('change',e=>{
   const node=e.target;
   if(node.type==='file'){
@@ -234,12 +288,13 @@ root.addEventListener('change',e=>{
   const other=node.name?.startsWith('q')&&node.form?.elements[node.name+'Other'];
   if(other){other.hidden=node.value!=='__other';other.required=!other.hidden;}
   syncApplication(node.form);
+  clearInvalidControl(node);
 });
 root.addEventListener('submit',e=>{
   e.preventDefault();
   if(e.target.dataset.action==='submit'){
     syncApplication(e.target);
-    if(e.target.querySelector('.submit-row button').disabled)return;
+    if(!validateApplication(e.target))return;
   }
   run(async()=>{
     const data=new FormData(e.target), action=e.target.dataset.action;
@@ -250,7 +305,7 @@ root.addEventListener('submit',e=>{
         const key='q'+q.id, value=data.get(key);
         return [q.id,q.type==='CHECKBOX'?data.getAll(key):value==='__other'?data.get(key+'Other'):value];
       }));
-      await api('submit',{token:requestToken,transaction:data.get('transaction'),email:data.get('email'),answers,files:await filesToData(data.getAll('docs'))});
+      await api('submit',{token:requestToken,transaction:data.get('transaction'),answers,files:await filesToData(data.getAll('docs'))});
       token=requestToken;
       sessionStorage.removeItem('tiponOnlineDraft');
     }else if(action==='upload')await api('upload',{files:await filesToData(data.getAll('docs'))});
