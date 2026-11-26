@@ -1,35 +1,164 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="theme-color" content="#075477">
 <title>TIPON TAWAG · Online Queue</title>
+<link rel="icon" href="assets/tipon-mark.svg">
 <style>
-:root{font:16px/1.55 system-ui,sans-serif;color:#093952;background:#eef6fa}
+:root{font:15px/1.55 system-ui,sans-serif;color:#093952;background:#eef6fa}
 *{box-sizing:border-box}
 body{margin:0}
-header{background:white;border-top:6px solid #f6b642;text-align:center;padding:22px;font-size:24px;font-weight:800}
-main{max-width:760px;margin:42px auto;padding:24px}
-section{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:24px}
-h1{font-size:clamp(26px,5vw,38px);margin:0 0 12px}
-a{display:inline-block;margin-top:12px;padding:10px 16px;border-radius:8px;background:#0879a4;color:white;font-weight:700;text-decoration:none}
-#status{color:#456477}
+header{background:#fff;border-top:6px solid #f6b642;padding:20px 24px;text-align:center;font-size:23px;font-weight:850}
+main{max-width:1320px;margin:28px auto;padding:0 22px 40px}
+.page-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:clamp(28px,4vw,40px);margin:0}
+h2{font-size:21px;margin:0 0 8px}
+p{color:#58798b}
+.card{background:#fff;border:1px solid #cfe2ed;border-radius:14px;padding:20px;margin:16px 0}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,.button{font:inherit;border:1px solid #bed8e7;border-radius:8px;padding:9px 13px;background:#0879a4;color:#fff;font-weight:750;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+button.secondary,.button.secondary{background:#fff;color:#075477}
+button.success{background:#16885e;border-color:#16885e}
+button:disabled{opacity:.55;cursor:default}
+a{color:#075477}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th,td{padding:11px;text-align:left;vertical-align:middle;border-bottom:1px solid #dae9f1}
+th{background:#eef6fa;font-size:13px}
+td{font-size:14px}
+.muted{color:#6c8998}
+.badge{display:inline-block;padding:4px 9px;border-radius:20px;background:#e8f2f7;color:#075477;font-size:12px;font-weight:800}
+.badge.ready{background:#e8f7ee;color:#167147}
+.badge.arrived{background:#fff3df;color:#86572b}
+dl{display:grid;grid-template-columns:minmax(170px,260px) minmax(0,1fr);gap:8px 16px;margin:18px 0}
+dt{font-weight:800;color:#456477;overflow-wrap:anywhere}
+dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.file-list{display:grid;gap:9px;padding:0;list-style:none}
+.file-list li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px;border:1px solid #dae9f1;border-radius:8px}
+[hidden]{display:none!important}
+@media(max-width:600px){main{padding:0 12px 30px}.card{padding:14px}dl{grid-template-columns:1fr;gap:3px}dd{margin-bottom:10px}.page-head{align-items:flex-start}}
 </style>
 </head>
 <body>
 <header>tipón · TAWAG</header>
-<main><section>
-<h1>Online Queue</h1>
-<p id="status">Opening the secure TIPON Workspace Online Queue…</p>
-<a id="openQueue" href="#">Open Online Queue</a>
-</section></main>
-<script src="config.js?v=online-3"></script>
+<main>
+  <div class="page-head">
+    <div><h1>Online Queue</h1><p>Recruitment applications submitted online</p></div>
+    <div class="actions"><a class="button secondary" href="./?view=staff">Staff Console</a><button id="refresh" type="button">Refresh</button></div>
+  </div>
+  <p id="status" class="status" role="status" aria-live="polite">Connecting to TIPON Workspace…</p>
+  <section id="listView" class="card">
+    <div class="table-wrap"><table>
+      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Status</th><th>Requirements</th><th>Actions</th></tr></thead>
+      <tbody id="listBody"><tr><td colspan="8" class="muted">Loading applications…</td></tr></tbody>
+    </table></div>
+  </section>
+  <section id="detailView" class="card" hidden>
+    <div class="actions"><button id="back" class="secondary" type="button">Back to Online Queue</button><button id="complete" class="success" type="button" hidden>Complete Application Review</button></div>
+    <h2 id="applicantName" style="margin-top:18px"></h2>
+    <p id="applicantStatus"></p>
+    <h3>Applicant Information</h3><dl id="answers"></dl>
+    <h3>Uploaded Requirements</h3><ul id="files" class="file-list"></ul>
+  </section>
+</main>
+<script src="config.js?v=online-4"></script>
+<script src="public-online-bridge.js?v=4" data-mode="staff"></script>
 <script>
+'use strict';
 (()=>{
-  const target=new URL(window.TIPON_CONFIG.onlineStaffBackendUrl);
-  target.searchParams.set('online','staff');
-  document.getElementById('openQueue').href=target.href;
-  window.location.replace(target.href);
+ const $=id=>document.getElementById(id);
+ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let applications=[],selected=new URLSearchParams(location.search).get('case')||'',loading=false;
+ const api=(action,data={})=>window.onlineRequest(action,data);
+ function date(value,time){
+   if(!value)return '—';
+   const d=new Date(value);
+   if(!Number.isFinite(d.getTime()))return String(value);
+   const opts=time?{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Manila'}:{dateStyle:'medium',timeZone:'Asia/Manila'};
+   return new Intl.DateTimeFormat('en-PH',opts).format(d);
+ }
+ function appointment(value){
+   if(!value)return '—';
+   const raw=String(value);
+   return date(raw.length===16?raw+':00+08:00':raw,true);
+ }
+ function stage(value){
+   if(value==='Arrived')return '<span class="badge arrived">Arrived at office</span>';
+   if(value==='Ready to book')return '<span class="badge ready">Ready to book</span>';
+   return '<span class="badge">'+esc(value||'—')+'</span>';
+ }
+ function setStatus(message){$('status').textContent=message||''}
+ function renderList(){
+   $('listView').hidden=Boolean(selected);
+   $('detailView').hidden=!selected;
+   $('listBody').innerHTML=applications.length?applications.map(row=>{
+     const files=Array.isArray(row.files)?row.files:[];
+     const complete=row.stage==='Review'?'<button class="success" data-complete="'+esc(row.id)+'" type="button">Complete</button>':'';
+     return '<tr><td>'+esc(date(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment(row.appointment))+'</td><td>'+stage(row.stage)+'</td><td>'+files.length+' file(s)</td><td><div class="actions">'+complete+'<button class="secondary" data-view="'+esc(row.id)+'" type="button">View</button></div></td></tr>';
+   }).join(''):'<tr><td colspan="8" class="muted">No online applications yet.</td></tr>';
+ }
+ async function loadList(silent){
+   if(loading)return;
+   loading=true;if(!silent)setStatus('Refreshing Online Queue…');
+   try{
+     const result=await api('list');
+     if(!Array.isArray(result))throw Error('Invalid Online Queue response.');
+     applications=result;renderList();setStatus('Live • '+applications.length+' application(s) • Synced '+new Date().toLocaleTimeString('en-PH',{timeZone:'Asia/Manila'}));
+   }catch(error){setStatus('Unable to load Online Queue: '+String(error?.message||error));}
+   finally{loading=false}
+ }
+ async function loadDetails(){
+   if(!selected){renderList();return}
+   $('listView').hidden=true;$('detailView').hidden=false;
+   setStatus('Loading applicant details…');
+   try{
+     const state=await api('readStaff',{id:selected});
+     $('applicantName').textContent=state.name||'Applicant';
+     $('applicantStatus').innerHTML=stage(state.stage)+(state.number?' &nbsp; <b>'+esc(state.number)+'</b>':'')+(state.appointment?' &nbsp; '+esc(appointment(state.appointment)):'');
+     $('answers').innerHTML=Object.entries(state.answers||{}).map(([key,value])=>'<dt>'+esc(key)+'</dt><dd>'+esc(Array.isArray(value)?value.join('\n'):value)+'</dd>').join('');
+     const files=Array.isArray(state.files)?state.files:[];
+     $('files').innerHTML=files.length?files.map(file=>'<li><span>'+esc(file.name)+'</span><button class="secondary" data-download="'+esc(file.id)+'" type="button">Download</button></li>').join(''):'<li class="muted">No uploaded requirements.</li>';
+     $('complete').hidden=state.stage!=='Review';
+     setStatus('Applicant details loaded.');
+   }catch(error){setStatus('Unable to load applicant details: '+String(error?.message||error));}
+ }
+ async function complete(id){
+   try{
+     const result=await api('complete',{id});
+     if(result&&result.ok===false)throw Error(result.error||'Application could not be completed.');
+     await loadList(true);
+     if(selected)await loadDetails();
+     setStatus('Application review completed. Status: Ready to book.');
+   }catch(error){setStatus('Unable to complete application: '+String(error?.message||error));}
+ }
+ $('refresh').onclick=()=>selected?loadDetails():loadList(false);
+ $('back').onclick=()=>{
+   selected='';const url=new URL(location.href);url.searchParams.delete('case');history.replaceState(null,'',url.pathname+url.search);renderList();void loadList(false);
+ };
+ $('complete').onclick=()=>selected&&complete(selected);
+ $('listBody').addEventListener('click',event=>{
+   const completeButton=event.target.closest('[data-complete]');
+   const viewButton=event.target.closest('[data-view]');
+   if(completeButton){void complete(completeButton.dataset.complete);return}
+   if(viewButton){
+     selected=viewButton.dataset.view;
+     const url=new URL(location.href);url.searchParams.set('case',selected);history.replaceState(null,'',url.pathname+url.search);
+     void loadDetails();
+   }
+ });
+ $('files').addEventListener('click',async event=>{
+   const button=event.target.closest('[data-download]');if(!button)return;
+   button.disabled=true;button.textContent='Downloading…';
+   try{
+     const output=await api('download',{id:selected,file:button.dataset.download});
+     const blob=new Blob([Uint8Array.from(atob(output.data),x=>x.charCodeAt(0))],{type:output.mime||'application/octet-stream'});
+     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=output.name||'requirement';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   }catch(error){setStatus('Download failed: '+String(error?.message||error));}
+   finally{button.disabled=false;button.textContent='Download'}
+ });
+ if(selected)void loadDetails();else void loadList(false);
+ setInterval(()=>{if(!selected)void loadList(true)},8000);
 })();
 </script>
 </body>
