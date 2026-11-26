@@ -217,9 +217,9 @@ function onlineMergeSheetAnswers_(records, sheet) {
     if(!answer){row._deleted=true;return row;}
     const cell=key=>{const column=headers.indexOf(key);return column<0?'':String(answer[column]||'');};
     const profile=JSON.parse(row[5]||'{}');
-    for(const key of Object.keys(profile)){
-      const column=headers.indexOf(key);
-      if(column>=0)profile[key]=String(answer[column]||'');
+    for(const key of headers){
+      if(metadata.has(key))continue;
+      profile[key]=String(answer[headers.indexOf(key)]||'');
     }
     const transaction=cell('Recruitment Transaction');
     if(transaction==='New Hire')row[3]='NH';
