@@ -179,7 +179,7 @@ function clearInvalidControl(control){
     wrapper.classList.remove('field-invalid');
     wrapper.querySelectorAll('[aria-invalid="true"]').forEach(item=>item.removeAttribute('aria-invalid'));
   }
-  if(!root.querySelector('.field-invalid'))notice.textContent='';
+  if(!root.querySelector('.field-invalid')){notice.textContent='';notice.hidden=true;}
 }
 function validateApplication(form){
   form.querySelectorAll('.field-invalid').forEach(node=>node.classList.remove('field-invalid'));
@@ -201,13 +201,13 @@ function validateApplication(form){
     }
   }
   if(invalid.length){
-    notice.textContent='Please complete all required fields highlighted in red.';
+    notice.textContent='Please complete all required fields highlighted in red.';notice.hidden=false;
     const first=invalid[0];
     first.wrapper?.scrollIntoView({behavior:'smooth',block:'center'});
     first.control?.focus({preventScroll:true});
     return false;
   }
-  notice.textContent='';
+  notice.textContent='';notice.hidden=true;
   return true;
 }
 function intake(){
@@ -270,7 +270,7 @@ async function render(){
 async function run(task){
   if(running)return;
   running=true;root.inert=true;notice.textContent='';notice.hidden=true;
-  try{await task();notice.textContent='';document.getElementById('backup').hidden=true;}
+  try{await task();notice.textContent='';notice.hidden=true;document.getElementById('backup').hidden=true;}
   catch(e){
     notice.textContent=e.message||String(e);notice.hidden=false;
     if(!bridgeWindow||/timed out/i.test(notice.textContent)){
