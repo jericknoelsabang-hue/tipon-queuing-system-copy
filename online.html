@@ -305,7 +305,9 @@ root.addEventListener('submit',e=>{
         const key='q'+q.id, value=data.get(key);
         return [q.id,q.type==='CHECKBOX'?data.getAll(key):value==='__other'?data.get(key+'Other'):value];
       }));
-      await api('submit',{token:requestToken,transaction:data.get('transaction'),answers,files:await filesToData(data.getAll('docs'))});
+      const emailQuestion=fields.find(q=>q.title==='Email / Gmail Address');
+      const email=String(answers[emailQuestion?.id]||'').trim();
+      await api('submit',{token:requestToken,transaction:data.get('transaction'),email,answers,files:await filesToData(data.getAll('docs'))});
       token=requestToken;
       sessionStorage.removeItem('tiponOnlineDraft');
     }else if(action==='upload')await api('upload',{files:await filesToData(data.getAll('docs'))});
