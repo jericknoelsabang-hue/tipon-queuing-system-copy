@@ -92,7 +92,7 @@
     <div class="card queue-table-card hide" id="queueOnlineCard">
       <div class="split"><div><h2>Online Queue</h2><p>Approved online applications, booked appointments, and applicants checked in at the office.</p></div><div class="buttons"><button class="btn ghost" id="onlineQueueRefresh" type="button">Refresh</button><a class="btn primary" id="onlineStaffLink" target="_blank" rel="noopener" hidden>Open Full Online Queue</a></div></div>
       <p id="onlineStaffStatus" role="status" aria-live="polite">Connecting to the GitHub-hosted Online Queue…</p>
-      <div class="table-wrap"><table><thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Status</th><th>Requirements</th><th>Action</th></tr></thead><tbody id="onlineQueueBody"><tr><td colspan="8" class="empty">Loading Online Queue…</td></tr></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Status</th><th>Requirements</th></tr></thead><tbody id="onlineQueueBody"><tr><td colspan="7" class="empty">Loading Online Queue…</td></tr></tbody></table></div>
       <div class="table-bottom"><span id="onlineQueueShowing" class="table-count">Showing 0–0 of 0</span></div>
     </div>
     <div class="card queue-table-card hide" id="queueCompletedCard"><div class="split"><div><h2 id="completedQueueHeading">Completed Queue</h2><p id="completedQueueDescription">Completed transactions across all service windows, newest first.</p></div></div>
@@ -152,11 +152,11 @@
       </div>
       <div id="tiponFormStatus" class="status hide" role="status"></div>
       <div id="tiponFormFields" class="tipon-form-fields"></div>
-      <section class="tipon-capture">
+      <section id="tiponCapture" class="tipon-capture">
         <h3>Applicant Photo and Signature</h3>
         <div class="tipon-capture-grid">
-          <div class="tipon-photo-box"><label class="field" for="tiponPhotoFile">Applicant photo (capture with this device or choose a JPEG/PNG image)</label><input id="tiponPhotoFile" type="file" accept="image/jpeg,image/png" capture="user"><img id="tiponPhotoPreview" alt="Applicant photo preview" hidden><p id="tiponPhotoSaved" class="small-muted"></p></div>
-          <div class="tipon-signature-box"><label class="field" for="tiponSignaturePad">Signature specimen</label><canvas id="tiponSignaturePad" width="960" height="250" aria-label="Draw applicant signature here"></canvas><div class="row"><button id="clearTiponSignature" class="btn ghost sm" type="button">Clear signature</button><small id="tiponSignatureSaved" class="small-muted"></small></div></div>
+          <div class="tipon-photo-box"><label class="field" for="tiponPhotoFile">Applicant photo (capture with this device or choose a JPEG/PNG image) <span class="required-star">*</span></label><input id="tiponPhotoFile" type="file" accept="image/jpeg,image/png" capture="user"><img id="tiponPhotoPreview" alt="Applicant photo preview" hidden><p id="tiponPhotoSaved" class="small-muted"></p></div>
+          <div class="tipon-signature-box"><label class="field" for="tiponSignaturePad">Signature specimen <span class="required-star">*</span></label><canvas id="tiponSignaturePad" width="960" height="250" aria-label="Draw applicant signature here"></canvas><div class="row"><button id="clearTiponSignature" class="btn ghost sm" type="button">Clear signature</button><small id="tiponSignatureSaved" class="small-muted"></small></div></div>
         </div>
       </section>
       <div class="tipon-dialog-actions"><button id="tiponFormCancel" class="btn ghost" type="button">Cancel</button><button id="tiponFormSave" class="btn success" type="submit">Save Tipon Form</button></div>
