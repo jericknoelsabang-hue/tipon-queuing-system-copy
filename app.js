@@ -264,7 +264,7 @@ function renderOnlineQueueRows(){
     const files=Array.isArray(row.files)?row.files:[];
     const fileNames=files.map(file=>esc(file.name)).join('<br>');
     const rawAppointment=String(row.appointment||'');
-    const appointment=rawAppointment?onlineQueueDate(rawAppointment.length===16?rawAppointment+':00+08:00':rawAppointment,true):'—';
+    const appointment=rawAppointment?onlineQueueDate(rawAppointment.length===16?rawAppointment+':00+08:00':rawAppointment,rawAppointment.length>10):'—';
     return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td class="online-queue-files">'+(fileNames||'—')+'</td><td><div class="online-queue-actions"><button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button></div></td></tr>';
   }).join(''):'<tr><td colspan="8" class="empty">No completed online applications yet. Completed reviews will appear here.</td></tr>';
   if(count)count.textContent='Showing '+(rows.length?1:0)+'–'+rows.length+' of '+rows.length;
