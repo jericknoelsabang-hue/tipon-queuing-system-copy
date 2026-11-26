@@ -132,12 +132,11 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
    }finally{loading=false}
  }
  async function deleteApplication(id,button){
-   if(!window.confirm('Remove this application from the active Online Queue? The record will be marked Deleted in the database and can be restored from Google Sheets.'))return;
    if(button){button.disabled=true;button.textContent='Deleting…'}
    try{
      await api('deleteApplication',{id});
      await loadList(true);
-     setStatus('Application marked Deleted and synced to the database.');
+     setStatus('Application deleted from the active list and synced to the database.');
    }catch(error){
      if(button){button.disabled=false;button.textContent='Delete'}
      setStatus('Unable to delete application: '+String(error?.message||error));
