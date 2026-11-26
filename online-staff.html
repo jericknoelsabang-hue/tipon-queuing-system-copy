@@ -42,7 +42,7 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
 .dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 [hidden]{display:none!important}
 @media(max-width:600px){main{padding:0 12px 30px}.card{padding:14px}dialog{padding:16px}.page-head{align-items:flex-start}}
-</style>
+button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.danger:hover{background:#ffe2df}</style>
 </head>
 <body>
 <header>tipón · TAWAG</header>
@@ -113,7 +113,7 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
        '<td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td>'+
        '<td>'+esc(appointment(row.appointment))+'</td>'+
        '<td><button class="secondary" type="button" data-requirements="'+esc(row.id)+'" '+(files.length?'':'disabled')+'>View</button><span class="file-count">'+files.length+' file(s)</span></td>'+
-       '<td><div class="row-actions"><button class="success" type="button" data-complete="'+esc(row.id)+'" '+(canComplete?'':'disabled')+'>'+completeLabel+'</button><button class="secondary" type="button" data-message="'+esc(row.id)+'" data-name="'+esc(row.name||'Applicant')+'">Message</button></div></td>'+
+       '<td><div class="row-actions"><button class="success" type="button" data-complete="'+esc(row.id)+'" '+(canComplete?'':'disabled')+'>'+completeLabel+'</button><button class="secondary" type="button" data-message="'+esc(row.id)+'" data-name="'+esc(row.name||'Applicant')+'">Message</button><button class="danger" type="button" data-delete="'+esc(row.id)+'">Delete</button></div></td>'+
        '</tr>';
    }).join(''):'<tr><td colspan="7" class="muted">No online applications yet.</td></tr>';
  }
@@ -130,6 +130,18 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
    }catch(error){
      setStatus('Unable to load Online Queue: '+String(error?.message||error));
    }finally{loading=false}
+ }
+ async function deleteApplication(id,button){
+   if(!window.confirm('Remove this application from the active Online Queue? The record will be marked Deleted in the database and can be restored from Google Sheets.'))return;
+   if(button){button.disabled=true;button.textContent='Deleting…'}
+   try{
+     await api('deleteApplication',{id});
+     await loadList(true);
+     setStatus('Application marked Deleted and synced to the database.');
+   }catch(error){
+     if(button){button.disabled=false;button.textContent='Delete'}
+     setStatus('Unable to delete application: '+String(error?.message||error));
+   }
  }
  async function complete(id,button){
    if(button){button.disabled=true;button.textContent='Completing…'}
@@ -183,9 +195,11 @@ textarea{display:block;width:100%;min-height:130px;resize:vertical;border:1px so
    const completeButton=event.target.closest('[data-complete]');
    const requirementsButton=event.target.closest('[data-requirements]');
    const messageButton=event.target.closest('[data-message]');
+   const deleteButton=event.target.closest('[data-delete]');
    if(completeButton){void complete(completeButton.dataset.complete,completeButton);return}
    if(requirementsButton){openRequirements(requirementsButton.dataset.requirements);return}
    if(messageButton){openMessage(messageButton.dataset.message,messageButton.dataset.name);return}
+   if(deleteButton){void deleteApplication(deleteButton.dataset.delete,deleteButton);return}
  });
  $('requirementsFiles').addEventListener('click',async event=>{
    const button=event.target.closest('[data-download]');
