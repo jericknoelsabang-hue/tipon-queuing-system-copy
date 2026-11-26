@@ -11,10 +11,26 @@ body{margin:0}
 header{background:white;border-top:6px solid #f6b642;text-align:center;padding:22px;font-size:24px;font-weight:800}
 main{max-width:870px;margin:auto;padding:24px}
 main.staff{max-width:1400px}
-h1{font-size:clamp(26px,5vw,42px);margin:.2em 0 .6em}
+h1{font-size:clamp(26px,5vw,42px);margin:.2em 0 .6em;text-align:center}
 section,fieldset{background:white;border:1px solid #cfe2ed;border-radius:15px;padding:18px;margin:16px 0}
-legend{font-weight:750;padding:0 9px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+legend{font-size:clamp(17px,2.4vw,21px);font-weight:750;padding:0 9px;max-width:100%}
+.grid{display:grid;gap:16px}
+.form-row{display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));align-items:start;gap:14px}
+fieldset,.question,label{min-width:0}
+label,.question,legend{overflow-wrap:anywhere}
+label{align-content:start}
+textarea{min-height:66px;resize:vertical}
+input[type=file]{max-width:100%}
+.required{color:#bd2031}
+.submit-row,.certification{text-align:center}
+.certification label.choice{justify-content:center;align-items:flex-start;max-width:660px;margin:8px auto 0}
+.certification span{line-height:1.55}
+.certification input{flex:none;margin-top:5px}
+.work-group+.work-group{padding-top:14px;border-top:1px solid #dae9f1}
+.work-group h3{margin:0 0 12px;font-size:16px}
+.instructions p{margin:.45em 0 .85em}
+@media(max-width:670px){.form-row{grid-template-columns:repeat(min(var(--columns),2),minmax(0,1fr))}}
+@media(max-width:450px){.form-row{grid-template-columns:1fr}}
 label{display:grid;gap:5px;font-size:14px;font-weight:650}
 label.choice{display:flex;align-items:center;font-weight:400}
 input,textarea,select,button{font:inherit;border-radius:8px;border:1px solid #bed8e7;padding:9px;min-width:0}
@@ -46,10 +62,11 @@ const root=document.getElementById('screen'), notice=document.getElementById('no
 let token=init.token, fields=[], running=false;
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=(action,data={})=>onlineRequest(action,{token,site:init.site,...data});
-const transaction=value=>value==='NH'?'New Hire':'Rehire';
-const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p><button>'+label+'</button></p></form>';
-const field=(name,label,type='text',attrs='')=>'<label>'+label+'<input name="'+name+'" type="'+type+'" '+attrs+'></label>';
-const docs='<label>Upload Pre-Requirements Documents (PDF or JPEG) *<input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
+const star='<span class="required" aria-label="required">*</span>';
+const marked=(value,required)=>esc(value)+(required?' '+star:'');
+const form=(action,contents,label)=>'<form data-action="'+action+'">'+contents+'<p'+(action==='submit'?' class="submit-row"':'')+'><button'+(action==='submit'?' disabled':'')+'>'+label+'</button></p></form>';
+const field=(name,label,type='text',attrs='')=>'<label><span>'+esc(label.replace(/ \*$/,''))+(label.endsWith(' *')?' '+star:'')+'</span><input name="'+name+'" type="'+type+'" '+attrs+'></label>';
+const docs='<label><span>Upload Pre-Requirements Documents (PDF or JPEG) '+star+'</span><input name="docs" type="file" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple required><small>Up to 5 MB per file and 10 MB per upload.</small></label>';
 const filesToData=async files=>{
   if(files.length>5||files.some(f=>f.size>5*1024*1024)||files.reduce((n,f)=>n+f.size,0)>10*1024*1024)throw Error('Choose up to five files, no more than 5 MB each and 10 MB total.');
   return Promise.all(files.map(file=>new Promise((resolve,reject)=>{
@@ -60,24 +77,84 @@ const filesToData=async files=>{
   })));
 };
 function question(q){
-  const title=esc(q.title)+(q.required?' *':''), name='q'+q.id, required=q.required?' required':'';
+  const title=marked(q.title,q.required), name='q'+q.id, required=q.required?' required':'';
   const help=q.help?'<small>'+esc(q.help)+'</small>':'';
-  if(q.type==='CHECKBOX')return '<div class="question" data-id="'+q.id+'"><strong>'+title+'</strong>'+help+q.choices.map(c=>'<label class="choice"><input type="checkbox" name="'+name+'" value="'+esc(c)+'">'+esc(c)+'</label>').join('')+(q.other?field(name,'Other'):'')+'</div>';
+  if(q.type==='CHECKBOX'){
+    const certification=q.title==='Certification';
+    const text=value=>esc(value).replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    return '<div class="question'+(certification?' certification':'')+'" data-id="'+q.id+'"><strong>'+title+'</strong>'+help+q.choices.map(c=>'<label class="choice"><input type="checkbox" name="'+name+'" value="'+esc(c)+'"'+(q.required&&q.choices.length===1?' required':'')+'><span>'+text(c)+'</span></label>').join('')+(q.other?field(name,'Other'):'')+'</div>';
+  }
   let control;
   if(q.choices.length)control='<select name="'+name+'"'+required+'><option value="">Select an option</option>'+q.choices.map(c=>'<option>'+esc(c)+'</option>').join('')+(q.other?'<option value="__other">Other</option>':'')+'</select>'+(q.other?'<input name="'+name+'Other" placeholder="Specify other" hidden>':'');
+  else if(q.title==='Email / Gmail Address'||q.title==='Mobile Number'){
+    control='<input name="'+name+'" type="'+(q.title==='Mobile Number'?'tel':'email')+'"'+required+'>';
+  }
   else if(q.type==='PARAGRAPH_TEXT')control='<textarea name="'+name+'" maxlength="1500"'+required+'></textarea>';
   else control='<input name="'+name+'" type="'+({DATE:'date',DATETIME:'datetime-local',TIME:'time'}[q.type]||'text')+'" maxlength="1500"'+required+'>';
-  return '<label class="question" data-id="'+q.id+'">'+title+help+control+'</label>';
+  return '<label class="question" data-id="'+q.id+'"><span>'+title+'</span>'+help+control+'</label>';
+}
+const instructions='<section class="instructions" aria-label="Application instructions">'+
+  '<strong>ENGLISH</strong><p>Please complete all applicable information accurately and truthfully. <strong>Fields marked with an asterisk ('+star+') are required.</strong></p>'+
+  '<p>After submitting, save your private application link and check the conversation for updates. Present your queue number to the recruiter when visiting the office.</p>'+
+  '<strong>TAGALOG</strong><p>Pakisagutan nang tama at kumpleto ang lahat ng kinakailangang impormasyon. <strong>Ang mga tanong na may asterisk ('+star+') ay kailangang sagutan.</strong></p>'+
+  '<p>Pagkatapos isumite ang form, i-save ang iyong private application link at tingnan ang conversation para sa updates. Ipakita ang queue number sa recruiter sa pagpunta sa opisina.</p></section>';
+const row=items=>'<div class="form-row" style="--columns:'+items.length+'">'+items.map(question).join('')+'</div>';
+const rows=(items,sizes)=>{
+  let offset=0;
+  return sizes.map(size=>{const part=items.slice(offset,offset+size);offset+=size;return part.length?row(part):'';}).join('')+
+    (offset<items.length?items.slice(offset).map(item=>row([item])).join(''):'');
+};
+function sectionLayout(group){
+  const items=group.items;
+  switch(group.title[0]){
+    case 'A':return rows(items,[3,3,3,4]);
+    case 'B':return rows(items,[3,2,2,2,2]);
+    case 'C':return rows(items,[2,2]);
+    case 'D':return rows(items,[3,3,3,3,1]);
+    case 'E':return rows(items,[3,3,3]);
+    case 'F':return rows(items,[2,2,2,2,2,2,1,2,2,1]);
+    case 'G': {
+      const groups=new Map();
+      for(const item of items){
+        const key=item.title.match(/^Work (\d+)/)?.[1]||'';
+        if(!groups.has(key))groups.set(key,[]);
+        groups.get(key).push(item);
+      }
+      return Array.from(groups,([number,fields])=>number?
+        '<div class="work-group grid"><h3>Work '+number+'</h3>'+rows(fields,[3,3,1])+'</div>':rows(fields,[1])).join('');
+    }
+    default:return rows(items,[]);
+  }
+}
+function syncApplication(form){
+  if(form?.dataset.action!=='submit')return;
+  const same=fields.find(q=>q.title.startsWith('Is your permanent address'));
+  const showPermanent=/^no\b/i.test(form.elements['q'+same?.id]?.value||'');
+  for(const item of fields.filter(q=>q.title.startsWith('Permanent '))){
+    const wrapper=form.querySelector('[data-id="'+item.id+'"]');
+    wrapper.hidden=!showPermanent;
+    for(const control of wrapper.querySelectorAll('input,select,textarea')){
+      control.disabled=!showPermanent;
+      control.required=showPermanent&&item.required;
+    }
+  }
+  form.querySelectorAll('.form-row').forEach(row=>{row.hidden=Array.from(row.children).every(child=>child.hidden);});
+  const requiredFilled=Array.from(form.elements).every(n=>!n.required||n.disabled||
+    (n.type==='checkbox'?n.checked:n.type==='file'?n.files.length>0:Boolean(n.value.trim())));
+  const requiredChoices=fields.filter(q=>q.required&&q.type==='CHECKBOX').every(q=>
+    Array.from(form.querySelectorAll('[name="q'+q.id+'"]:checked')).length>0);
+  form.querySelector('button[type="submit"], .submit-row button').disabled=!(requiredFilled&&requiredChoices&&form.checkValidity());
 }
 function intake(){
   fields=JSON.parse(document.getElementById('recruitment-fields').textContent);
-  let groups=[{title:'Applicant information',items:[]}];
+  const groups=[];
   for(const q of fields) {
     if(!q.id)groups.push({title:q.title,items:[]});
     else groups.at(-1).items.push(q);
   }
-  const blocks=groups.filter(g=>g.items.length).map(g=>'<fieldset><legend>'+esc(g.title)+'</legend><div class="grid">'+g.items.map(question).join('')+'</div></fieldset>').join('');
-  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction *</legend><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label>'+field('email','Email *','email','maxlength="254" required')+'</fieldset>'+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
+  const blocks=groups.filter(g=>g.items.length).map(g=>'<fieldset><legend>'+esc(g.title)+'</legend><div class="grid">'+sectionLayout(g)+'</div></fieldset>').join('');
+  root.innerHTML=form('submit','<fieldset><legend>Recruitment Transaction '+star+'</legend><div class="grid"><label><span>Select your transaction</span><select name="transaction" required><option value="">Select recruitment transaction</option><option value="NH">New Hire</option><option value="RH">Rehire</option></select></label>'+field('email','Email *','email','maxlength="254" required')+'</div></fieldset>'+instructions+blocks+'<fieldset><legend>Pre-Requirements</legend>'+docs+'</fieldset>','Submit');
+  syncApplication(root.querySelector('form'));
 }
 async function conversation(){
   const state=await api('read');
@@ -115,25 +192,19 @@ async function run(task){
   }
   finally{running=false;root.inert=false;}
 }
+root.addEventListener('input',e=>syncApplication(e.target.form));
 root.addEventListener('change',e=>{
   const node=e.target;
-  if(!node.name?.startsWith('q'))return;
-  const other=node.form.elements[node.name+'Other'];
+  const other=node.name?.startsWith('q')&&node.form?.elements[node.name+'Other'];
   if(other){other.hidden=node.value!=='__other';other.required=!other.hidden;}
-  const same=fields.find(q=>q.title.startsWith('Is your permanent address'));
-  if(same && node.name==='q'+same.id){
-    const skip=/^yes\b/i.test(node.value);
-    for(const field of fields.filter(q=>q.title.startsWith('Permanent '))){
-      const wrapper=root.querySelector('[data-id="'+field.id+'"]');
-      wrapper.hidden=skip;
-      for(const control of wrapper.querySelectorAll('input,select,textarea')){
-        control.disabled=skip; control.required=!skip&&field.required;
-      }
-    }
-  }
+  syncApplication(node.form);
 });
 root.addEventListener('submit',e=>{
   e.preventDefault();
+  if(e.target.dataset.action==='submit'){
+    syncApplication(e.target);
+    if(e.target.querySelector('.submit-row button').disabled)return;
+  }
   run(async()=>{
     const data=new FormData(e.target), action=e.target.dataset.action;
     if(action==='submit'){
