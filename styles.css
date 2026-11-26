@@ -1578,3 +1578,8 @@ header.site-header::before{
 #tiponSignaturePad{display:block;width:100%;height:150px;margin:7px 0;border:1px dashed #83a9bc;border-radius:8px;background:linear-gradient(#fff,#fff),repeating-linear-gradient(transparent 0 48px,#e9f0f4 49px 50px);touch-action:none}
 .tipon-dialog-actions{display:flex;justify-content:flex-end;gap:9px;padding:13px 22px;border-top:1px solid var(--line);background:#fff}
 @media(max-width:700px){.tipon-dialog{max-height:94vh}.tipon-dialog-head{padding:13px 14px}.tipon-form-fields{grid-template-columns:1fr;padding:14px}.tipon-form-fields .tipon-question.wide{grid-column:auto}.tipon-capture{margin:0 14px 12px;padding:10px}.tipon-capture-grid{grid-template-columns:1fr}.tipon-dialog-actions{padding:11px 14px}}
+
+/* Keep all standard window actions on one desktop row, including Tipon Form. */
+#staff .window-actions.standard{grid-template-columns:repeat(4,minmax(0,1fr))}
+#staff .window-actions.standard>.btn{min-width:0;white-space:nowrap}
+@media(max-width:700px){#staff .window-actions.standard{grid-template-columns:repeat(2,minmax(0,1fr))}}
