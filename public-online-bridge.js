@@ -31,13 +31,13 @@ function openWorkspaceConnection(){
   if(popup)startBridgeDeadline();
   return Boolean(popup);
 }
-if(!staffBridge){
-  const onlineFrame=document.createElement('iframe');
-  onlineFrame.hidden=true;onlineFrame.title='TIPON Online Queue connection';
-  onlineFrame.src=onlineBackend.href;
-  document.body.append(onlineFrame);
-  startBridgeDeadline();
-}
+const onlineFrame=document.createElement('iframe');
+onlineFrame.hidden=true;onlineFrame.title='TIPON Online Queue data connection';
+onlineFrame.setAttribute('aria-hidden','true');
+onlineFrame.tabIndex=-1;
+onlineFrame.src=onlineBackend.href;
+document.body.append(onlineFrame);
+startBridgeDeadline();
 async function onlineRequest(action,input){
   await bridgeReady;
   return new Promise((resolve,reject)=>{
@@ -47,3 +47,5 @@ async function onlineRequest(action,input){
     bridgeWindow.postMessage({type:'tipon-online-request',channel:bridgeChannel,id,action,input},bridgeSourceOrigin);
   });
 }
+window.onlineRequest=onlineRequest;
+window.openWorkspaceConnection=openWorkspaceConnection;
