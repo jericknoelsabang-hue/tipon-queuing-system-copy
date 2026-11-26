@@ -64,7 +64,7 @@ function onlineWrite_(sheet, values) {
 
 function onlineQueueView_(params) {
   const view=String(params.online||'applicant');
-  if(view==='bridge') return onlineBridge_(String(params.channel||''));
+  if(view==='bridge'||view==='staff-bridge') return onlineBridge_(String(params.channel||''),view==='staff-bridge');
   if (!['applicant','staff','onsite'].includes(view)) throw Error('Unknown online queue page.');
   const ticket=String(params.case||'');
   const onsite=String(params.site||'');
@@ -206,11 +206,11 @@ function onlineFiles_(props, input) {
   catch(error){ for(const file of saved)file.setTrashed(true); throw error; }
 }
 
-function onlineBridge_(channel) {
+function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=['fields','submit','read','upload','chat','book','arrive'];
+    const allowed=${JSON.stringify(staff?['list','complete','staffChat','readStaff','onsiteLink','download']:['fields','submit','read','upload','chat','book','arrive'])};
     if(window.top!==window){
       window.addEventListener('message',event=>{
         const data=event.data;

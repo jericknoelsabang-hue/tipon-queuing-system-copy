@@ -1,7 +1,8 @@
 'use strict';
 const bridgeOrigin=window.location.origin;
 const bridgeChannel=crypto.randomUUID();
-const onlineBackend=new URL(window.TIPON_CONFIG.onlineBackendUrl);
+const staffBridge=document.currentScript?.dataset.mode==='staff';
+const onlineBackend=new URL(staffBridge?window.TIPON_CONFIG.onlineStaffBackendUrl:window.TIPON_CONFIG.onlineBackendUrl);
 const pendingOnline=new Map();
 let bridgeWindow, bridgeSourceOrigin, acceptBridge, rejectBridge;
 const bridgeReady=new Promise((resolve,reject)=>{acceptBridge=resolve;rejectBridge=reject;});
@@ -22,7 +23,7 @@ window.addEventListener('message',event=>{
 });
 const onlineFrame=document.createElement('iframe');
 onlineFrame.hidden=true;onlineFrame.title='TIPON Online Queue connection';
-onlineBackend.searchParams.set('online','bridge');
+onlineBackend.searchParams.set('online',staffBridge?'staff-bridge':'bridge');
 onlineBackend.searchParams.set('channel',bridgeChannel);
 onlineFrame.src=onlineBackend.href;
 document.body.append(onlineFrame);
