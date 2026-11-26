@@ -66,7 +66,8 @@ function onlineWrite_(sheet, values) {
 function onlineQueueView_(params) {
   const view=String(params.online||'applicant');
   if(view==='bridge'||view==='staff-bridge') return onlineBridge_(String(params.channel||''),view==='staff-bridge');
-  if (!['applicant','staff','onsite'].includes(view)) throw Error('Unknown online queue page.');
+  if(view==='staff') throw Error('The recruiter Online Queue interface is hosted on GitHub Pages.');
+  if (!['applicant','onsite'].includes(view)) throw Error('Unknown online queue page.');
   const ticket=String(params.case||'');
   const onsite=String(params.site||'');
   const page=HtmlService.createTemplateFromFile('Online');
@@ -214,15 +215,11 @@ function onlineFiles_(props, input) {
 
 function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
-  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue connection</title><style>body{font:16px system-ui;padding:20px;color:#093952;background:#eef6fa}button{padding:10px;color:white;background:#0879a4;border:0;border-radius:8px;cursor:pointer}</style><h2>TIPON Workspace connection</h2><p>Keep this window open while using Online Queue.</p><button id="returnToQueue" hidden>Return to Online Queue</button><script>
+  const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
     const allowed=${JSON.stringify(staff?['list','complete','readStaff','onsiteLink','download']:['fields','submit','read','upload','book','arrive','confirmArrival'])};
-    const pages=${staff?'window.top.opener':'window.top!==window?window.top:null'};
+    const pages=window.top!==window?window.top:window.opener;
     if(pages){
-      if(${JSON.stringify(staff)}){
-        const back=document.getElementById('returnToQueue');
-        back.hidden=false;back.onclick=()=>pages.focus();
-      }
       window.addEventListener('message',event=>{
         const data=event.data;
         if(event.origin!==origin||event.source!==pages||data?.type!=='tipon-online-request'||data.channel!==channel||!allowed.includes(data.action))return;
@@ -232,8 +229,7 @@ function onlineBridge_(channel, staff) {
       pages.postMessage({type:'tipon-online-ready',channel},origin);
     }
   </script>`;
-  const page=HtmlService.createHtmlOutput(html);
-  return staff?page:page.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return HtmlService.createHtmlOutput(html).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 function onlineAnswersSheet_(props) {
