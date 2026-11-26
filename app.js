@@ -9,6 +9,7 @@ let connectionHealthy=false;
  let seq=0,loading=false,queuedRefresh=false,hasLoaded=false,writePending=0,writeSerial=0,pollTimer=null,refreshFailures=0,activeWindowActions=new Set(),tableSignature={wait:'',precheckDone:'',completed:''},qrUrl='',qrObj=null,initialized=false,last={},page='display',dirty=false,staffSignature='',windowSignature='';
 let lastGuideCue=null,guideDirty=false;let armed=localStorage.getItem('tqSound')==='1',audio=null,waitPage=0,precheckDonePage=0,completedPage=0,editWindow=0,editTxCode='',editWindowTxs=[],activeStaffWindow=Number(new URLSearchParams(location.search).get('window'))||0;
 let remarksTimer=null,remarksSaveQueue=Promise.resolve(),remarksDraft={ticketId:'',value:''},remarksSaved={ticketId:'',value:''},remarksQueued={ticketId:'',value:''};
+let onlineApplications=[],onlineQueueLoading=false,onlineQueueLastLoaded=0,onlineQueueError='';
 const queueBoards={};
 for(const [stage,prefix,emptyText] of [
   ['precheck','precheckQueue','No queues waiting for pre-checking.'],
@@ -245,24 +246,75 @@ function openStaffWindow(i){
  waitPage=0;precheckDonePage=0;completedPage=0;tableSignature={wait:'',precheckDone:'',completed:''};staffSignature='';
  staff();queueTables();window.scrollTo({top:0,behavior:'smooth'});
 }
+function onlineQueueDate(value,withTime=false){
+  if(!value)return '—';
+  const date=new Date(value);
+  if(!Number.isFinite(date.getTime()))return String(value);
+  const options=withTime?{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Manila'}:{dateStyle:'medium',timeZone:'Asia/Manila'};
+  return new Intl.DateTimeFormat('en-PH',options).format(date);
+}
+function onlineQueueStage(value){
+  return value==='Arrived'?'Arrived at office':value==='Ready to book'?'Ready to book':value||'—';
+}
+function renderOnlineQueueRows(){
+  const body=$('onlineQueueBody'),count=$('onlineQueueShowing'),statusNode=$('onlineStaffStatus');
+  if(!body)return;
+  const rows=Array.isArray(onlineApplications)?onlineApplications:[];
+  body.innerHTML=rows.length?rows.map(row=>{
+    const files=Array.isArray(row.files)?row.files:[];
+    const fileNames=files.map(file=>esc(file.name)).join('<br>');
+    const rawAppointment=String(row.appointment||'');
+    const appointment=rawAppointment?onlineQueueDate(rawAppointment.length===16?rawAppointment+':00+08:00':rawAppointment,true):'—';
+    const complete=row.stage==='Review'
+      ?'<button class="btn sm success" type="button" data-online-complete="'+esc(row.id)+'">Complete</button>'
+      :'';
+    return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td class="online-queue-files">'+(fileNames||'—')+'</td><td><div class="online-queue-actions">'+complete+'<button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button></div></td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">No online applications yet.</td></tr>';
+  if(count)count.textContent='Showing '+(rows.length?1:0)+'–'+rows.length+' of '+rows.length;
+  if(statusNode){
+    if(onlineQueueError)statusNode.textContent='Online Queue connection issue: '+onlineQueueError;
+    else if(onlineQueueLoading)statusNode.textContent='Refreshing Online Queue…';
+    else statusNode.textContent='Live application list • Last synced '+new Date(onlineQueueLastLoaded||Date.now()).toLocaleTimeString('en-PH',{timeZone:'Asia/Manila'});
+  }
+}
+async function refreshOnlineQueue(force=false){
+  if(page!=='staff'||onlineQueueLoading)return;
+  if(!force&&Date.now()-onlineQueueLastLoaded<4500)return;
+  if(typeof window.onlineRequest!=='function'){
+    onlineQueueError='The GitHub Online Queue bridge has not loaded. Reload this page.';
+    renderOnlineQueueRows();return;
+  }
+  onlineQueueLoading=true;onlineQueueError='';renderOnlineQueueRows();
+  try{
+    const result=await window.onlineRequest('list',{});
+    if(!Array.isArray(result))throw Error('The Online Queue service returned an invalid applicant list.');
+    onlineApplications=result;
+    onlineQueueLastLoaded=Date.now();
+  }catch(error){
+    onlineQueueError=String(error?.message||error||'Unable to load applicants.');
+  }finally{
+    onlineQueueLoading=false;renderOnlineQueueRows();
+  }
+}
 function onlineQueueCard(){
- const card=$('queueOnlineCard'), link=$('onlineStaffLink');
- if(!card||!link)return;
- card.classList.toggle('hide',page!=='staff');
- const endpoint=window.TIPON_CONFIG?.onlineBackendUrl;
- const applicantButton=$('onlineGetQueueSetup');
- if(applicantButton) {
-   applicantButton.disabled=!endpoint;
-   if(endpoint) applicantButton.onclick=()=>{
-     const applicantUrl=new URL('online.html',location.href);
-     window.open(applicantUrl.href,'_blank','noopener');
-   };
- }
- if(!endpoint)return;
- const url=new URL('online-staff.html',location.href);
- link.href=url.href;
- link.hidden=false;
- $('onlineStaffStatus').hidden=true;
+  const card=$('queueOnlineCard'),link=$('onlineStaffLink');
+  if(!card)return;
+  card.classList.toggle('hide',page!=='staff');
+  const endpoint=C.onlineBackendUrl;
+  const applicantButton=$('onlineGetQueueSetup');
+  if(applicantButton){
+    applicantButton.disabled=!endpoint;
+    if(endpoint)applicantButton.onclick=()=>{
+      const applicantUrl=new URL('online.html',C.pagesUrl||location.href);
+      window.open(applicantUrl.href,'_blank','noopener');
+    };
+  }
+  if(link){
+    const fullUrl=new URL('online-staff.html',C.pagesUrl||location.href);
+    link.href=fullUrl.href;link.hidden=false;
+  }
+  renderOnlineQueueRows();
+  if(page==='staff'&&!onlineQueueLoading&&Date.now()-onlineQueueLastLoaded>4500)void refreshOnlineQueue();
 }
 function staff(){
   const n=Number(S.windowCount||0);
@@ -948,6 +1000,29 @@ $('reconnect').onclick=()=>{
 $('test').onclick=async()=>{try{const r=await jp('health');if(!r.ok)throw Error(r.error);if(!COMPATIBLE.has(r.version))throw Error('Backend is '+(r.version||'outdated')+'. Deploy the latest Code.gs.');status('Backend verified • '+r.version+' • '+r.windows+' service windows.'+(r.version!==REQUIRED?' Update to v14 for direct Pre Checking completion.':''),'ok');await refresh(true)}catch(e){error(e)}};
 $('clear').onclick=()=>{localStorage.removeItem('tqApi');$('api').value='';S.version='';qrUrl='';status('Connection cleared.','err');qr()};
 $('backToWindows').onclick=()=>openStaffWindow(0);
+$('onlineQueueRefresh').onclick=()=>void refreshOnlineQueue(true);
+$('onlineQueueBody').addEventListener('click',async event=>{
+  const complete=event.target.closest('[data-online-complete]');
+  const details=event.target.closest('[data-online-view]');
+  if(complete){
+    const id=complete.dataset.onlineComplete;
+    complete.disabled=true;complete.textContent='Completing…';
+    try{
+      const result=await window.onlineRequest('complete',{id});
+      if(result&&result.ok===false)throw Error(result.error||'Application could not be completed.');
+      onlineQueueLastLoaded=0;
+      await refreshOnlineQueue(true);
+      staffMessage('Application review completed. The applicant is now Ready to book.','ok');
+    }catch(error){
+      complete.disabled=false;complete.textContent='Complete';
+      staffMessage('Unable to complete application: '+String(error?.message||error),'err');
+    }
+  }else if(details){
+    const detailUrl=new URL('online-staff.html',C.pagesUrl||location.href);
+    detailUrl.searchParams.set('case',details.dataset.onlineView);
+    window.open(detailUrl.href,'_blank','noopener');
+  }
+});
 const full=$('fullscreen');
 function reflect(){full.setAttribute('aria-pressed',document.fullscreenElement===$('display')?'true':'false')}
 full.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('display').requestFullscreen()}catch(e){error(e,true)}};
