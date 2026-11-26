@@ -259,17 +259,14 @@ function onlineQueueStage(value){
 function renderOnlineQueueRows(){
   const body=$('onlineQueueBody'),count=$('onlineQueueShowing'),statusNode=$('onlineStaffStatus');
   if(!body)return;
-  const rows=Array.isArray(onlineApplications)?onlineApplications:[];
+  const rows=(Array.isArray(onlineApplications)?onlineApplications:[]).filter(row=>row.stage!=='Review');
   body.innerHTML=rows.length?rows.map(row=>{
     const files=Array.isArray(row.files)?row.files:[];
     const fileNames=files.map(file=>esc(file.name)).join('<br>');
     const rawAppointment=String(row.appointment||'');
     const appointment=rawAppointment?onlineQueueDate(rawAppointment.length===16?rawAppointment+':00+08:00':rawAppointment,true):'—';
-    const complete=row.stage==='Review'
-      ?'<button class="btn sm success" type="button" data-online-complete="'+esc(row.id)+'">Complete</button>'
-      :'';
-    return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td class="online-queue-files">'+(fileNames||'—')+'</td><td><div class="online-queue-actions">'+complete+'<button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button></div></td></tr>';
-  }).join(''):'<tr><td colspan="8" class="empty">No online applications yet.</td></tr>';
+    return '<tr><td>'+esc(onlineQueueDate(row.date,true))+'</td><td><b>'+esc(row.number||'—')+'</b></td><td><b>'+esc(row.name||'—')+'</b></td><td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td><td>'+esc(appointment)+'</td><td>'+esc(onlineQueueStage(row.stage))+'</td><td class="online-queue-files">'+(fileNames||'—')+'</td><td><div class="online-queue-actions"><button class="btn sm ghost" type="button" data-online-view="'+esc(row.id)+'">View</button></div></td></tr>';
+  }).join(''):'<tr><td colspan="8" class="empty">No completed online applications yet. Completed reviews will appear here.</td></tr>';
   if(count)count.textContent='Showing '+(rows.length?1:0)+'–'+rows.length+' of '+rows.length;
   if(statusNode){
     if(onlineQueueError)statusNode.textContent='Online Queue connection issue: '+onlineQueueError;
@@ -1001,23 +998,9 @@ $('test').onclick=async()=>{try{const r=await jp('health');if(!r.ok)throw Error(
 $('clear').onclick=()=>{localStorage.removeItem('tqApi');$('api').value='';S.version='';qrUrl='';status('Connection cleared.','err');qr()};
 $('backToWindows').onclick=()=>openStaffWindow(0);
 $('onlineQueueRefresh').onclick=()=>void refreshOnlineQueue(true);
-$('onlineQueueBody').addEventListener('click',async event=>{
-  const complete=event.target.closest('[data-online-complete]');
+$('onlineQueueBody').addEventListener('click',event=>{
   const details=event.target.closest('[data-online-view]');
-  if(complete){
-    const id=complete.dataset.onlineComplete;
-    complete.disabled=true;complete.textContent='Completing…';
-    try{
-      const result=await window.onlineRequest('complete',{id});
-      if(result&&result.ok===false)throw Error(result.error||'Application could not be completed.');
-      onlineQueueLastLoaded=0;
-      await refreshOnlineQueue(true);
-      staffMessage('Application review completed. The applicant is now Ready to book.','ok');
-    }catch(error){
-      complete.disabled=false;complete.textContent='Complete';
-      staffMessage('Unable to complete application: '+String(error?.message||error),'err');
-    }
-  }else if(details){
+  if(details){
     const detailUrl=new URL('online-staff.html',C.pagesUrl||location.href);
     detailUrl.searchParams.set('case',details.dataset.onlineView);
     window.open(detailUrl.href,'_blank','noopener');
