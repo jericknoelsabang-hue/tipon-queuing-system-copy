@@ -1,4 +1,4 @@
-const CFG={spreadsheetId:'1S8qIM1Iw4WxHQovO5T4RaD1bzr_C36fFBX4O3Udjdik',queue:'QUEUE',windows:'WINDOWS',tx:'TRANSACTION_TYPES',settings:'SETTINGS',maxWindows:20};
+const CFG={spreadsheetId:'1WXpjoRxO5AXUtul2n6zUNZyGYW26efTW1wuXO8qgbeY',queue:'QUEUE',windows:'WINDOWS',tx:'TRANSACTION_TYPES',settings:'SETTINGS',maxWindows:20};
 const QH=['Ticket ID','Queue Date','Queue Taken At','Queue No','Transaction Code','Transaction','Applicant Name','Position / Purpose','Status','Current Window','Pre-check Called At','Pre-check Done At','Transferred At','Assigned Transaction Called At','Last Recalled At','Window Completed At','Prechecked','Pre Check By','Recruiter','Remarks'];
 const WH=['Window','Active Ticket ID','Queue No','Transaction Code','Transaction','Applicant Name','Position / Purpose','Called At','Updated At','Queue Row'];
 const EH=['Event ID','Ticket ID','Event At','Queue Date','Queue No','Applicant Name','Transaction Code','Transaction','Position / Purpose','Event','From Window','To Window','Recruiter','Remarks'];
@@ -753,7 +753,7 @@ function ensure_(ss,name,h){
   return sheet;
 }
 let _tiponSpreadsheet=null;
-function ss_(){return _tiponSpreadsheet||(_tiponSpreadsheet=SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('QUEUE_SPREADSHEET_ID')||CFG.spreadsheetId))}
+function ss_(){return _tiponSpreadsheet||(_tiponSpreadsheet=SpreadsheetApp.openById(CFG.spreadsheetId))}
 function nameKey_(f,l){return norm_(f)+'|'+norm_(l)}function norm_(v){let s=String(v||'').trim().toUpperCase();if(s.normalize)s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');return s.replace(/[^A-Z0-9]/g,'')}
 function txt_(v,n){return String(v||'').replace(/[\u0000-\u001F\u007F]/g,' ').replace(/\s+/g,' ').trim().slice(0,n)}function code_(v,n){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,n)}
 function int_(v,a,b){v=Number(v);if(!Number.isInteger(v)||v<a||v>b)throw Error('Invalid window.');return v}function bool_(v){return typeof v==='boolean'?v:['TRUE','YES','1','ACTIVE'].includes(String(v).toUpperCase())}
