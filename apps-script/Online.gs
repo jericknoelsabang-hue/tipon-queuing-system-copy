@@ -135,7 +135,7 @@ function onlineQueueView_(params) {
   if (!['applicant','onsite'].includes(view)) throw Error('Unknown online queue page.');
   const ticket=String(params.case||'');
   const onsite=String(params.site||'');
-  const page=HtmlService.createTemplateFromFile('Online');
+  const page=HtmlService.createTemplateFromFile('OnlinePage');
   page.initial=JSON.stringify({view,token:/^[a-f0-9]{64}$/.test(ticket)?ticket:'',site:/^[a-f0-9]{64}$/.test(onsite)?onsite:''});
   return page.evaluate().setTitle('TIPON TAWAG · Online Queue');
 }
