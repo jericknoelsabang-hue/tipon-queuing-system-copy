@@ -56,12 +56,20 @@ function migrateLegacyOnlineStore_(props,book) {
   for(const [sourceName,targetName] of mappings) {
     const source=legacy.getSheetByName(sourceName),target=book.getSheetByName(targetName);
     if(!source||!target||source.getLastRow()<2) continue;
-    const existing=new Set(onlineRead_(target).map(row=>String(row[0]||'')));
+    const existing=new Map();
+    for(const row of onlineRead_(target)){
+      const key=sourceName==='Applications'?String(row[0]||''):JSON.stringify(row.map(String));
+      existing.set(key,(existing.get(key)||0)+1);
+    }
+    const occurrences=new Map();
     for(const row of onlineRead_(source)) {
       const id=String(row[0]||'');
-      if(!id||existing.has(id)) continue;
-      target.appendRow(row.map(value=>String(value??'')));
-      existing.add(id);
+      if(!id)continue;
+      const key=sourceName==='Applications'?id:JSON.stringify(row.map(String));
+      const occurrence=(occurrences.get(key)||0)+1;
+      occurrences.set(key,occurrence);
+      if(occurrence<=(existing.get(key)||0))continue;
+      onlineWrite_(target,row);
       migrated++;
     }
   }
