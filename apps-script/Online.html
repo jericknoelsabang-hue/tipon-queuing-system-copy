@@ -28,7 +28,6 @@ th,td{padding:11px;text-align:left;border-bottom:1px solid #dae9f1;vertical-alig
 th{background:#eef6fa}
 .scroll{overflow:auto}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
-.message{overflow-wrap:anywhere;white-space:pre-wrap;background:#eef6fa;padding:10px;border-radius:7px}
 #notice{color:#8c2a25}
 small{font-weight:400}
 [hidden]{display:none!important}
@@ -78,19 +77,25 @@ async function intake(){
 const download=(file)=>'<button type="button" data-file="'+esc(file.id)+'">'+esc(file.name)+'</button>';
 async function staff(){
   const [list,onsite]=await Promise.all([api('list'),api('onsiteLink')]);
-  root.innerHTML='<section><div class="actions"><button type="button" data-refresh>Refresh</button><a href="'+esc(onsite)+'">Office check-in link for onsite QR</a></div><div class="scroll"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Action</th><th>Uploaded files</th></tr></thead><tbody>'+list.map(row=>'<tr><td>'+esc(row.date?new Date(row.date).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}):'')+'</td><td>'+esc(row.number||'—')+'<br><small>'+esc(row.appointment?row.appointment.replace('T',' ')+' PHT':row.stage)+'</small></td><td>'+esc(row.name)+'</td><td>'+transaction(row.transaction)+'</td><td><div class="actions"><button type="button" data-complete="'+esc(row.id)+'" '+(row.stage==='Review'?'':'disabled')+'>Complete</button><button type="button" data-chat="'+esc(row.id)+'">Message</button></div></td><td><div class="actions">'+row.files.map(file=>'<button type="button" data-file="'+esc(file.id)+'" data-case="'+esc(row.id)+'">'+esc(file.name)+'</button>').join('')+'</div></td></tr>').join('')+(list.length?'':'<tr><td colspan="6">No online applications yet.</td></tr>')+'</tbody></table></div></section>';
+  root.innerHTML='<section><div class="actions"><button type="button" data-refresh>Refresh</button><a href="'+esc(onsite)+'">Office check-in link for onsite QR</a></div><div class="scroll"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Action</th><th>Uploaded files</th></tr></thead><tbody>'+list.map(row=>'<tr><td>'+esc(row.date?new Date(row.date).toLocaleDateString('en-PH',{timeZone:'Asia/Manila'}):'')+'</td><td>'+esc(row.number||'—')+'<br><small>'+esc(row.stage==='Arrived'?'Arrived at office':row.stage)+(row.appointment?'<br>'+esc(row.appointment.replace('T',' ')+' PHT'):'')+'</small></td><td>'+esc(row.name)+'</td><td>'+transaction(row.transaction)+'</td><td><div class="actions"><button type="button" data-complete="'+esc(row.id)+'" '+(row.stage==='Review'?'':'disabled')+'>Complete</button><button type="button" data-view="'+esc(row.id)+'">View Details</button></div></td><td><div class="actions">'+row.files.map(file=>'<button type="button" data-file="'+esc(file.id)+'" data-case="'+esc(row.id)+'">'+esc(file.name)+'</button>').join('')+'</div></td></tr>').join('')+(list.length?'':'<tr><td colspan="6">No online applications yet.</td></tr>')+'</tbody></table></div></section>';
 }
 async function conversation(recruiter){
   const state=await api(recruiter?'readStaff':'read');
-  const refresh='<button type="button" data-refresh>Refresh messages</button>';
   const controls=recruiter?'<button type="button" data-back>Back to Online Queue</button>':
-    '<p>Save <a href="'+esc(state.url+'?online=applicant&case='+token)+'">your private application link</a> to return to the chat.</p>';
+    '<p>Save <a href="'+esc(state.url+'?online=applicant&case='+token)+'">your private application link</a> to check your application status.</p>';
   let process='';
   if(!recruiter && state.stage==='Ready to book')process=form('book',field('appointment','Choose your arrival date and time (PHT) *','datetime-local','required'),'Get Queue');
   if(!recruiter && state.stage==='Review')process=form('upload',docs,'Upload additional documents');
-  if(!recruiter && state.stage==='Booked')process+='<p>On your appointment date, scan the QR displayed at the office to join the active queue.</p>';
-  const profile=recruiter?'<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(value)+'</dd>').join('')+'</dl></details>':'';
-  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+(recruiter?download(f):esc(f.name))+'</li>').join('')+'</ul>'+process+'</section><section><h2>Conversation</h2>'+refresh+state.messages.map(m=>'<p class="message"><strong>'+esc(m.author)+'</strong><br>'+esc(m.text)+'</p>').join('')+form(recruiter?'staffChat':'chat','<label>Your message<textarea name="message" maxlength="2000" required></textarea></label>','Send message')+'</section>';
+  if(!recruiter && state.stage==='Booked')process+=arrivalControls(state.appointment);
+  if(!recruiter && state.stage==='Arrived')process+='<p role="status"><strong>Checked in at the office.</strong> Your queue number has been added to the Online Queue. Please wait for the recruiter to call you.</p>';
+  const profile=recruiter?'<details><summary>Applicant information</summary><dl>'+Object.entries(state.answers||{}).map(([label,value])=>'<dt><b>'+esc(label)+'</b></dt><dd>'+esc(Array.isArray(value)?value.join(', '):value)+'</dd>').join('')+'</dl></details>':'';
+  root.innerHTML='<section>'+controls+'<h2>'+esc(state.name)+'</h2><p>'+esc(state.stage)+(state.number?' · <strong>'+esc(state.number)+'</strong>':'')+(state.appointment?' · '+esc(state.appointment.replace('T',' ')+' PHT'):'')+'</p>'+profile+'<p>Uploaded files</p><ul>'+state.files.map(f=>'<li>'+(recruiter?download(f):esc(f.name))+'</li>').join('')+'</ul>'+process+'</section>';
+}
+function arrivalControls(appointment){
+  const date=String(appointment||'').slice(0,10);
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(part=>[part.type,part.value]));
+  const today=[parts.year,parts.month,parts.day].join('-');
+  return '<p>When you arrive at the office on your appointment date, confirm your arrival below.</p><form data-action="confirmArrival"><p><button'+(date===today?'':' disabled')+'>Nandito na ako sa office</button></p></form>';
 }
 async function render(){
   if(init.view==='staff')return selected?conversation(true):staff();
@@ -157,7 +162,7 @@ root.addEventListener('click',e=>{
       const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=output.name;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);return;
     }
     if(d.complete)await api('complete',{id:d.complete});
-    if(d.chat)selected=d.chat;
+    if(d.view)selected=d.view;
     if('back' in d)selected='';
     await render();
   });
