@@ -103,7 +103,11 @@ function onlineOperate_(action,d,staff) {
     if(!['NH','RH'].includes(d.transaction)) throw Error('Choose New Hire or Rehire.');
     if(!/^[a-f0-9]{64}$/.test(String(d.token||''))) throw Error('Invalid application session.');
     const digest=onlineDigest_(d.token);
-    if(all.some(row=>row[1]===digest)) return {url:url+'?online=applicant&case='+d.token};
+    const existing=all.find(row=>row[1]===digest);
+    if(existing){
+      saveOnlineApplicantAnswers_(props,existing);
+      return {url:url+'?online=applicant&case='+d.token};
+    }
     const profile={};
     const copiedFields=onlineFields_().filter(field=>field.id);
     const firstAnswer=title=>onlineText_(d.answers?.[copiedFields.find(field=>field.title===title)?.id],250);
@@ -130,6 +134,7 @@ function onlineOperate_(action,d,staff) {
       for(const file of saved) onlineWrite_(files,[record,file.getId(),file.getName()]);
       onlineWrite_(apps,[record,digest,now.toISOString(),d.transaction,name,JSON.stringify(profile),'Review','','','']);
     } catch(error) { for(const file of saved) file.setTrashed(true); throw error; }
+    saveOnlineApplicantAnswers_(props,[record,digest,now.toISOString(),d.transaction,name,JSON.stringify(profile)]);
     return {url:url+'?online=applicant&case='+d.token};
   }
   const idx=staff?all.findIndex(row=>row[0]===d.id):(/^[a-f0-9]{64}$/.test(String(d.token||''))?all.findIndex(row=>row[1]===onlineDigest_(d.token)):-1);
@@ -229,4 +234,48 @@ function onlineBridge_(channel, staff) {
   </script>`;
   const page=HtmlService.createHtmlOutput(html);
   return staff?page:page.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function onlineAnswersSheet_(props) {
+  const id=props.getProperty('QUEUE_SPREADSHEET_ID');
+  if(!id||id===CFG.spreadsheetId)throw Error('The separate queue database is unavailable.');
+  if(DriveApp.getFileById(id).getSharingAccess()!==DriveApp.Access.PRIVATE)
+    throw Error('The applicant database must use restricted sharing.');
+  const book=SpreadsheetApp.openById(id);
+  return book.getSheetByName('ONLINE_APPLICATIONS')||book.insertSheet('ONLINE_APPLICATIONS');
+}
+
+function saveOnlineApplicantAnswers_(props, row, destination) {
+  const sheet=destination||onlineAnswersSheet_(props);
+  const profile=JSON.parse(row[5]);
+  const metadata={'Application ID':row[0],'Submitted at (UTC)':row[2],'Recruitment Transaction':row[3]==='NH'?'New Hire':'Rehire','Applicant Name':row[4]};
+  const answers={...metadata,...profile};
+  const previous=sheet.getLastRow()?sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0]:[];
+  const headers=[...new Set([...previous,...Object.keys(answers)])];
+  if(headers.length>sheet.getMaxColumns())sheet.insertColumnsAfter(sheet.getMaxColumns(),headers.length-sheet.getMaxColumns());
+  if(headers.length!==previous.length){
+    sheet.getRange(1,1,1,headers.length).setValues([headers.map(value=>"'"+value)]).setFontWeight('bold').setWrap(true);
+    sheet.setFrozenRows(1);
+  }
+  const match=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,1).createTextFinder(row[0]).matchEntireCell(true).findNext():null;
+  const values=headers.map(key=>{
+    const value=answers[key];
+    return value==null||value===''?'':"'"+(Array.isArray(value)?value.join('\n'):String(value));
+  });
+  if(match)sheet.getRange(match.getRow(),1,1,values.length).setValues([values]);
+  else sheet.appendRow(values);
+}
+
+function backfillOnlineApplicantAnswers() {
+  const lock=LockService.getScriptLock();
+  lock.waitLock(20000);
+  try{
+    onlineStaff_();
+    const props=PropertiesService.getScriptProperties();
+    const source=SpreadsheetApp.openById(props.getProperty('ONLINE_STORE')).getSheetByName('Applications');
+    const destination=onlineAnswersSheet_(props);
+    const applications=onlineRead_(source);
+    for(const row of applications)saveOnlineApplicantAnswers_(props,row,destination);
+    return {applications:applications.length};
+  }finally{try{SpreadsheetApp.flush();}finally{lock.releaseLock();}}
 }
