@@ -89,7 +89,7 @@ function onlineOperate_(action,d,staff) {
   if(!storeId) throw Error('Online Queue has not been configured.');
   const data=SpreadsheetApp.openById(storeId), apps=data.getSheetByName('Applications');
   const messages=data.getSheetByName('Messages'), files=data.getSheetByName('Documents');
-  const all=onlineRead_(apps), url=ScriptApp.getService().getUrl();
+  const all=onlineRead_(apps), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
   const fileList=id=>onlineRead_(files).filter(file=>file[0]===id);

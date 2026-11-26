@@ -1,6 +1,7 @@
 /* Public frontend configuration. Do not put passwords, private tokens or personal data here. */
 'use strict';
 window.TIPON_CONFIG=Object.freeze({
+  onlineStaffBackendUrl:'https://script.google.com/a/macros/tipon.coop/s/AKfycbxRUEMWirVp6X29KMH2n_5DnsbzLxbdisroEcH4_0_GaOqb8nIzg5NLhbNjSbKjPrPmnA/exec',
   onlineBackendUrl:'https://script.google.com/macros/s/AKfycbwriduTnRaDWHahv8Z_nCwjK5x7zNX2EhpVH987nRg97bUphz8sBFPABMEdj-nHwx2EOw/exec',
   backendUrl:'https://script.google.com/macros/s/AKfycbwriduTnRaDWHahv8Z_nCwjK5x7zNX2EhpVH987nRg97bUphz8sBFPABMEdj-nHwx2EOw/exec',
   previousBackendUrl:'https://script.google.com/macros/s/AKfycbwAxcNfU1CtX0YPV1ScYHX2oAmw0oc3Jn-ndrRTdKF8n_9CP9v_qDD0dLjP7TOFEerM/exec',

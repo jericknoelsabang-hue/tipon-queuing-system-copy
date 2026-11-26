@@ -260,7 +260,7 @@ function onlineQueueCard(){
    };
  }
  if(!endpoint)return;
- const url=new URL(endpoint);
+ const url=new URL(window.TIPON_CONFIG.onlineStaffBackendUrl||endpoint);
  url.searchParams.set('online','staff');
  link.href=url.href;
  link.hidden=false;
