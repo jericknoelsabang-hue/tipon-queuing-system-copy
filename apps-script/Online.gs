@@ -83,6 +83,125 @@ function migrateLegacyOnlineStore_(props,book) {
   return migrated;
 }
 
+function onlineActiveTiponTicket_(d) {
+  const id=String(d.id||'').trim(),window=Number(d.window);
+  if(!/^[a-f0-9-]{36}$/i.test(id)||!Number.isInteger(window)||window<1)throw Error('Select the active queue ticket first.');
+  const book=ss_(),queue=book.getSheetByName(CFG.queue);
+  if(!queue||queue.getLastRow()<2)throw Error('The active queue ticket is unavailable.');
+  const rows=queue.getRange(2,1,queue.getLastRow()-1,QH.length).getDisplayValues();
+  const row=rows.find(item=>String(item[0])===id);
+  if(!row||String(row[8]).toUpperCase()!=='SERVING'||Number(row[9])!==window)throw Error('Tipon Form is available only for the ticket currently serving at this window.');
+  const transaction=String(row[4]||'').toUpperCase();
+  if(!['NH','RH','TR'].includes(transaction))throw Error('Tipon Form is only available for New Hire, Rehire, and Transfer.');
+  const assignment=windowTx_(book,window);
+  if(!assignmentAllows_(assignment,transaction))throw Error('This window is not assigned to the ticket transaction.');
+  return {id,window,row,transaction,queueNo:String(row[3]||'')};
+}
+
+function onlineApplicationSheetRow_(sheet,id) {
+  if(!sheet||sheet.getLastRow()<2)return null;
+  const headers=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim());
+  const idColumn=headers.indexOf('Application ID');
+  if(idColumn<0)return null;
+  const rows=sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues();
+  const index=rows.findIndex(row=>String(row[idColumn])===String(id));
+  return index<0?null:{headers,row:rows[index],sheetRow:index+2};
+}
+
+function onlineTiponProfile_(ticket,all,answersSheet) {
+  const existingIndex=all.findIndex(row=>String(row[0])===ticket.id&&!row._deleted&&row[6]!=='Deleted');
+  if(existingIndex>=0)return {profile:JSON.parse(all[existingIndex][5]||'{}'),recordIndex:existingIndex};
+  const saved=onlineApplicationSheetRow_(answersSheet,ticket.id);
+  const profile={};
+  if(saved)for(let i=0;i<saved.headers.length;i++){
+    const key=saved.headers[i];
+    if(!['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links'].includes(key))profile[key]=String(saved.row[i]||'');
+  }
+  const bits=String(ticket.row[6]||'').trim().split(/\s+/);
+  if(!profile['First Name'])profile['First Name']=bits.length>1?bits.slice(0,-1).join(' '):bits[0]||'';
+  if(!profile['Last Name'])profile['Last Name']=bits.length>1?bits.at(-1):'';
+  return {profile,recordIndex:-1};
+}
+
+function onlineGetTiponForm_(d,all,answersSheet) {
+  onlineStaff_();
+  const ticket=onlineActiveTiponTicket_(d),stored=onlineTiponProfile_(ticket,all,answersSheet);
+  const fields=onlineFields_();
+  return {id:ticket.id,window:ticket.window,transaction:ticket.transaction,queueNo:ticket.queueNo,
+    name:String(ticket.row[6]||''),purpose:String(ticket.row[7]||''),answers:stored.profile,fields,
+    recordExists:stored.recordIndex>=0};
+}
+
+function onlineSaveCapture_(props,ticketId,kind,data) {
+  const value=String(data||'');
+  if(!value)return '';
+  const match=value.match(/^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/);
+  if(!match)throw Error('Photo and signature must be JPEG or PNG images.');
+  const bytes=Utilities.base64Decode(match[2]),limit=kind==='photo'?5*1024*1024:1*1024*1024;
+  if(!bytes.length||bytes.length>limit)throw Error(kind==='photo'?'Photo must be 5 MB or smaller.':'Signature image must be 1 MB or smaller.');
+  const folderId=props.getProperty('ONLINE_FOLDER');
+  if(!folderId)throw Error('Online Queue storage has not been initialized.');
+  const folder=DriveApp.getFolderById(folderId);
+  const extension=match[1]==='image/png'?'png':'jpg';
+  const filename='TIPON-'+kind.toUpperCase()+'-'+ticketId+'.'+extension;
+  const file=folder.createFile(Utilities.newBlob(bytes,match[1],filename));
+  return 'https://drive.google.com/file/d/'+file.getId()+'/view';
+}
+
+function onlineUpsertTiponAnswers_(sheet,ticket,profile,name,stage) {
+  const saved=onlineApplicationSheetRow_(sheet,ticket.id);
+  const metadata={
+    'Application ID':ticket.id,
+    'Submitted at (UTC)':saved?.row[saved.headers.indexOf('Submitted at (UTC)')]||new Date().toISOString(),
+    'Recruitment Transaction':ticket.transaction==='NH'?'New Hire':ticket.transaction==='RH'?'Rehire':'Transfer',
+    'Applicant Name':name,
+    'Application Status':stage||'Tipon Form Saved',
+    'Appointment (PHT)':saved?.row[saved.headers.indexOf('Appointment (PHT)')]||'',
+    'Queue Number':ticket.queueNo,
+    'Uploaded File Names':saved?.row[saved.headers.indexOf('Uploaded File Names')]||'',
+    'Uploaded File Links':saved?.row[saved.headers.indexOf('Uploaded File Links')]||''
+  };
+  const values={...metadata,...profile},previous=sheet.getLastRow()?sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim()):[];
+  const headers=[...new Set([...previous,...Object.keys(values)])];
+  if(headers.length>sheet.getMaxColumns())sheet.insertColumnsAfter(sheet.getMaxColumns(),headers.length-sheet.getMaxColumns());
+  if(headers.length!==previous.length)sheet.getRange(1,1,1,headers.length).setValues([headers.map(value=>"'"+value)]).setFontWeight('bold').setWrap(true).setFrozenRows(1);
+  const rowValues=headers.map(key=>{const value=values[key];return value==null||value===''?'':"'"+(Array.isArray(value)?value.join('\\n'):String(value));});
+  const current=onlineApplicationSheetRow_(sheet,ticket.id);
+  if(current)sheet.getRange(current.sheetRow,1,1,headers.length).setValues([rowValues]);
+  else sheet.appendRow(rowValues);
+}
+
+function onlineSaveTiponForm_(props,d,all,apps,answersSheet) {
+  onlineStaff_();
+  const ticket=onlineActiveTiponTicket_(d),fields=onlineFields_().filter(field=>field.id);
+  if(!d.answers||typeof d.answers!=='object'||Array.isArray(d.answers))throw Error('Complete the Tipon Form fields.');
+  const profile=onlineTiponProfile_(ticket,all,answersSheet).profile;
+  for(const field of fields){
+    const raw=d.answers[field.title];
+    const value=Array.isArray(raw)?raw.map(item=>onlineText_(item,500)).filter(Boolean):onlineText_(raw,1500);
+    const selected=Array.isArray(value)?value:value?[value]:[];
+    if(field.required&&!selected.length)throw Error('Required: '+field.title);
+    if(field.choices.length&&!field.other&&selected.some(item=>!field.choices.includes(item)))throw Error('Invalid answer: '+field.title);
+    profile[field.title]=value;
+  }
+  const photoUrl=onlineSaveCapture_(props,ticket.id,'photo',d.photoData)||String(profile['Photo URL']||'');
+  const signatureUrl=onlineSaveCapture_(props,ticket.id,'signature',d.signatureData)||String(profile['Signature URL']||'');
+  if(!photoUrl||!signatureUrl)throw Error('Capture the applicant photo and signature before saving.');
+  profile['Photo URL']=photoUrl;profile['Signature URL']=signatureUrl;
+  const first=String(profile['First Name']||'').trim(),last=String(profile['Last Name']||'').trim();
+  const name=[first,last].filter(Boolean).join(' ')||String(ticket.row[6]||'');
+  const existingIndex=all.findIndex(row=>String(row[0])===ticket.id&&!row._deleted&&row[6]!=='Deleted');
+  let stage='Tipon Form Saved';
+  if(existingIndex>=0){
+    const original=all[existingIndex];stage=String(original[6]||'Review');
+    apps.getRange(existingIndex+2,4,1,3).setValues([[ticket.transaction,name,JSON.stringify(profile)].map(value=>"'"+String(value))]);
+    const updated=apps.getRange(existingIndex+2,1,1,ONLINE_HEADERS.length).getValues()[0];
+    saveOnlineApplicantAnswers_(props,updated,answersSheet);
+  }else onlineUpsertTiponAnswers_(answersSheet,ticket,profile,name,stage);
+  SpreadsheetApp.flush();
+  return {ok:true,id:ticket.id,name,photoUrl,signatureUrl,stage};
+}
+
 function onlineMergeSheetAnswers_(records, sheet) {
   if(!sheet)return records.map(row=>{row._deleted=true;return row;});
   const lastRow=sheet.getLastRow(), lastColumn=sheet.getLastColumn();
@@ -180,9 +299,9 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  const staffActions=['list','complete','deleteApplication','readStaff','onsiteLink','download','sendMessage'];
+  const staffActions=['list','complete','deleteApplication','getTiponForm','saveTiponForm','readStaff','onsiteLink','download','sendMessage'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','complete','book','arrive','confirmArrival','sendMessage','sendApplicantMessage'];
+  const mutations=['submit','upload','complete','book','arrive','confirmArrival','saveTiponForm','sendMessage','sendApplicantMessage'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -201,6 +320,8 @@ function onlineOperate_(action,d,staff) {
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
   const fileList=id=>onlineRead_(files).filter(file=>file[0]===id);
+  if(action==='getTiponForm')return onlineGetTiponForm_(d,all,answersSheet);
+  if(action==='saveTiponForm')return onlineSaveTiponForm_(props,d,all,apps,answersSheet);
   if(action==='list') {
     const docs=onlineRead_(files);
     return all.filter(row=>!row._deleted&&row[6]!=='Deleted').slice().reverse().map(row=>({id:row[0],date:row[2],transaction:row[3],name:row[4],stage:row[6],
@@ -338,7 +459,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
+    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','getTiponForm','saveTiponForm','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
     const pages=window.top!==window?window.top:window.opener;
     if(pages){
       window.addEventListener('message',event=>{
