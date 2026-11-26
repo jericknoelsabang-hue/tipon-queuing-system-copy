@@ -235,8 +235,8 @@ function applicantGuidance(stage){
   const messages={
     'Review':'Your application is under review. Please wait while the recruiter reviews your documents. Once approved, you can select an office visit date and get your queue number.',
     'Ready to book':'Your application has been approved. Select your office visit date, then select Get QUEUE NUMBER.',
-    'Booked':'Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your queue number to be called.',
-    'Arrived':'You have checked in at the office. Please wait for your queue number to be called.'
+    'Booked':'Your queue number is ready. On your selected visit date, select “I’m at the office” when you arrive. Then wait for your number to be called.',
+    'Arrived':'You have checked in at the office. Please wait for your number to be called.'
   };
   return '<p class="applicant-guidance" role="status">'+esc(messages[stage]||'Please wait for the recruiter to review your application.')+'</p>';
 }
@@ -282,7 +282,7 @@ function arrivalControls(appointment){
   const date=appointment?.slice(0,10);
   const parts=Object.fromEntries(new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]));
   const today=[parts.year,parts.month,parts.day].join('-');
-  return '<p class="arrival-instruction">On your selected visit date, check in by selecting “I’m at the office” when you arrive.</p>'+
+  return '<p class="arrival-instruction">When you arrive on your selected visit date, select “I’m at the office” to check in. Then wait for your number to be called.</p>'+
     '<form data-action="confirmArrival"><p class="submit-row"><button'+(date===today?'':' disabled')+'>I’m at the office</button></p></form>';
 }
 function queueConfirmation(ticket){
