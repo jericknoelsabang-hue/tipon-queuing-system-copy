@@ -1144,7 +1144,7 @@ $('openAddTx').onclick=()=>{
  const editor=$('txAddEditor'),isOpening=editor.classList.contains('hide');
  editor.classList.toggle('hide',!isOpening);
  $('openAddTx').setAttribute('aria-expanded',String(isOpening));
- $('openAddTx').textContent=isOpening?'Cancel':'Add Transaction Type';
+ $('openAddTx').textContent=isOpening?'Close':'Add Transaction Type';
  if(isOpening)$('newCode').focus();
 };
 $('addTx').onclick=async()=>{
