@@ -147,7 +147,6 @@ function onlineTiponProfile_(ticket,apps,answersSheet) {
 }
 
 function onlineGetTiponForm_(d,apps,answersSheet) {
-  onlineStaff_();
   const ticket=onlineActiveTiponTicket_(d);
   const stored=onlineTiponProfile_(ticket,apps,answersSheet),profile=stored.profile;
   const fields=onlineFields_();
@@ -157,7 +156,6 @@ function onlineGetTiponForm_(d,apps,answersSheet) {
 }
 
 function onlineTiponFormStatus_(d,apps,answersSheet) {
-  onlineStaff_();
   const ticket=onlineActiveTiponTicket_(d),stored=onlineTiponProfile_(ticket,apps,answersSheet);
   return {id:ticket.id,saved:Boolean(stored.profile['Photo URL']&&stored.profile['Signature URL']),recordExists:stored.recordIndex>=0};
 }
@@ -499,12 +497,12 @@ function onlineOperate_(action,d,staff) {
   const props=PropertiesService.getScriptProperties();
   const data=ss_();
   const apps=data.getSheetByName(ONLINE_RECORDS_SHEET);
-  const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
-  const messages=data.getSheetByName(ONLINE_MESSAGES_SHEET);
-  if(!apps||!files||!messages) throw Error('Run initializeOnlineQueue() before using Online Recruitment.');
   const answersSheet=data.getSheetByName('ONLINE_APPLICATIONS');
   if(action==='tiponFormStatus')return onlineTiponFormStatus_(d,apps,answersSheet);
   if(action==='getTiponForm')return onlineGetTiponForm_(d,apps,answersSheet);
+  const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
+  const messages=data.getSheetByName(ONLINE_MESSAGES_SHEET);
+  if(!apps||!files||!messages) throw Error('Run initializeOnlineQueue() before using Online Recruitment.');
   if(['listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'].includes(action))onlineEnsurePdfInfrastructure_(props,data);
   if(action==='listPdfTemplates')return onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)).map(({code,type,name,fileId,folderId,namingConvention})=>({code,type,name,fileId,folderId,namingConvention}));
   if(action==='savePdfTemplate')return onlineSavePdfTemplate_(d,props,data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET));
@@ -520,7 +518,6 @@ function onlineOperate_(action,d,staff) {
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
   const fileList=id=>onlineRead_(files).filter(file=>file[0]===id);
-  if(action==='getTiponForm')return onlineGetTiponForm_(d,all,answersSheet);
   if(action==='saveTiponForm')return onlineSaveTiponForm_(props,d,apps,answersSheet);
   if(action==='list') {
     const docs=onlineRead_(files),queue=data.getSheetByName(CFG.queue),checkedIn=new Set();
