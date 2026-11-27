@@ -539,11 +539,11 @@ async function loadPdfTemplates(force=false){
 }
 function renderPdfTemplates(){
  const host=$('pdfTemplateRows');if(!host)return;
- host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.namingConvention||'—')+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'">Deactivate</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No Word template configured.</td></tr>';
+ host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.namingConvention||'—')+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'" data-file-id="'+esc(item.fileId||'')+'">Delete</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No Word template configured.</td></tr>';
  host.querySelectorAll('[data-pdf-delete]').forEach(button=>button.onclick=async()=>{
   button.disabled=true;button.textContent='Updating…';
-  try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete});pdfTemplateRevision++;pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deactivated.'}
-  catch(error){button.disabled=false;button.textContent='Deactivate';$('pdfTemplateSetupStatus').textContent=String(error?.message||error)}
+  try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete,fileId:button.dataset.fileId});pdfTemplateRevision++;pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deleted.'}
+  catch(error){button.disabled=false;button.textContent='Delete';$('pdfTemplateSetupStatus').textContent=String(error?.message||error)}
  });
 }
 function bindPdfTemplateControls(){
