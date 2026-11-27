@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=18.3">
-<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=compact-contact-fields"></script>
+<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=school-work-capture-1"></script>
 
 
 <style>
@@ -22,6 +22,13 @@
 .tipon-field-row :is(input,select,textarea){max-width:100%;min-width:0}
 @media(max-width:720px){.tipon-field-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:480px){.tipon-field-row{grid-template-columns:1fr}}
+</style><style>
+#tiponFormDialog{overflow:hidden}
+#tiponRecruitmentForm{max-height:calc(92dvh - 2px);overflow-y:auto}
+#tiponPhotoPreview[hidden]{display:none}
+.tipon-device-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+#tiponCamera video{width:min(100%,480px);display:block;margin:10px auto}
+@media(min-width:721px){.tipon-school-row{grid-template-columns:2fr 2fr 1fr 1fr}}
 </style></head><body>
 <header class="site-header"><div class="head">
   <div class="brand"><img class="tipon-logo" id="brandPhoto" src="assets/tipon-logo-hd.webp" alt="tipón Federation logo">
@@ -197,13 +204,13 @@
       <section id="tiponCapture" class="tipon-capture">
         <h3>Applicant Photo and Signature</h3>
         <div class="tipon-capture-grid">
-          <div class="tipon-photo-box"><label class="field" for="tiponPhotoFile">Applicant photo (capture with this device or choose a JPEG/PNG image) <span class="required-star">*</span></label><input id="tiponPhotoFile" type="file" accept="image/jpeg,image/png" capture="user"><img id="tiponPhotoPreview" alt="Applicant photo preview" hidden><p id="tiponPhotoSaved" class="small-muted"></p></div>
-          <div class="tipon-signature-box"><label class="field" for="tiponSignaturePad">Signature specimen <span class="required-star">*</span></label><canvas id="tiponSignaturePad" width="960" height="250" aria-label="Draw applicant signature here"></canvas><div class="row"><button id="clearTiponSignature" class="btn ghost sm" type="button">Clear signature</button><small id="tiponSignatureSaved" class="small-muted"></small></div></div>
+          <div class="tipon-photo-box"><label class="field" for="tiponPhotoFile">Applicant photo (capture with this device or choose a JPEG/PNG image) <span class="required-star">*</span></label><input id="tiponPhotoFile" type="file" accept="image/jpeg,image/png" capture="user"><img id="tiponPhotoPreview" alt="Applicant photo preview" hidden><p id="tiponPhotoSaved" class="small-muted"></p><div class="tipon-device-actions"><button type="button" class="btn ghost sm" id="openCamera">Capture</button></div></div>
+          <div class="tipon-signature-box"><label class="field" for="tiponSignaturePad">Signature specimen <span class="required-star">*</span></label><canvas id="tiponSignaturePad" width="960" height="250" aria-label="Draw applicant signature here"></canvas><div class="tipon-device-actions"><button id="connectStu" type="button" class="btn ghost sm">Connect to STU-540</button><button id="clearTiponSignature" class="btn ghost sm" type="button">Clear signature</button></div><div><small id="tiponSignatureSaved" class="small-muted"></small></div></div>
         </div>
       </section>
       <div class="tipon-dialog-actions"><button id="tiponFormCancel" class="btn ghost" type="button">Cancel</button><button id="tiponFormSave" class="btn success" type="submit">Save Tipon Form</button></div>
     </form>
   </dialog>
-</main>
+<dialog id="tiponCamera" aria-label="Capture applicant photo"><label>Camera <select id="cameraSource"></select></label><video autoplay playsinline muted></video><div class="tipon-device-actions"><button class="btn success" type="button" id="takePhoto">Take Photo</button><button class="btn ghost" type="button" id="closeCamera">Close</button></div></dialog></main>
 <footer class="footer">tipón TAWAG · Bawat tawag, may malasakit. · WIN AS A TEAM</footer>
 </body></html>
