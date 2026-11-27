@@ -77,6 +77,24 @@ th{background:#eef6fa}
 #notice{color:#8c2a25}
 small{font-weight:400}
 [hidden]{display:none!important}
+/* Keep section headings inside the card while retaining fieldset semantics. */
+fieldset > legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid #dae8ef;
+  line-height: 1.35;
+}
+fieldset > legend + * { clear: both; }
+form :is(fieldset, section) { padding: clamp(16px, 3vw, 24px); min-inline-size: 0; }
+form :is(.grid, .form-row, label, .question) > * { min-inline-size: 0; max-inline-size: 100%; }
+form :is(p, li, button) { overflow-wrap: anywhere; }
+form select { text-overflow: ellipsis; }
+@media (max-width: 520px) {
+  main { padding: 16px 12px; }
+  .form-row { grid-template-columns: minmax(0, 1fr); }
+}
 </style>
 </head>
 <body><header><img src="assets/tipon-logo-hd.webp" alt="TIPON Federation" width="118" style="vertical-align:middle;margin-right:12px">TAWAG</header>
