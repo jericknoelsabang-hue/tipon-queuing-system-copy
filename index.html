@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=18.3">
-<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=tx-header-close"></script>
+<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=window-instruction"></script>
 
 
 </head><body>
@@ -71,7 +71,7 @@
     </div>
     <div class="card">
       <div class="split" id="staffListHeader"><div><h2>Service Windows</h2><p>Edit assigned transactions and recruiter for each window. Only windows without active downstream sessions can be removed safely.</p></div><div class="buttons"><span class="pill" id="wc">5 WINDOWS</span><button id="addWin" class="btn success" type="button">+ Add Window</button></div></div>
-      <div class="split hide" id="windowConsoleHeader"><div><h2 id="windowConsoleTitle">Window Console</h2><p>Call and review queues for this service window.</p></div><button id="backToWindows" class="btn ghost" type="button">Back to Windows</button></div>
+      <div class="split hide" id="windowConsoleHeader"><div><p>Call and review queues for this service window.</p></div><button id="backToWindows" class="btn ghost" type="button">Back to Windows</button></div>
       <div id="staffWins"></div>
       <div class="inline-editor hide" id="windowEditor"><h3 id="windowEditorTitle">Edit Window</h3><div class="grid">
         <div class="field"><label for="editWindowTxToggle">Assigned transaction</label><div class="assignment-dropdown" id="editWindowTx">
