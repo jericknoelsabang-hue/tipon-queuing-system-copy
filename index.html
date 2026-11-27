@@ -7,10 +7,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=18.3">
-<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=window-instruction"></script>
+<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=recruiter-address"></script>
 
 
-</head><body>
+<style>
+#tiponFormFields .tipon-section,.tipon-field-row{grid-column:1/-1}
+.tipon-field-row{display:grid;grid-template-columns:repeat(var(--count),minmax(0,1fr));gap:12px;align-items:start}
+.tipon-field-row[hidden]{display:none}
+#tiponFormFields .tipon-field-row>.tipon-question{grid-column:auto;min-width:0}
+.tipon-field-row :is(input,select,textarea){max-width:100%;min-width:0}
+@media(max-width:720px){.tipon-field-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.tipon-field-row{grid-template-columns:1fr}}
+</style></head><body>
 <header class="site-header"><div class="head">
   <div class="brand"><img class="tipon-logo" id="brandPhoto" src="assets/tipon-logo-hd.webp" alt="tipón Federation logo">
     <div class="brand-copy tawag-brand"><span class="brand-name">TAWAG<span class="brand-dot">.</span></span><span class="brand-tagline">Bawat tawag, may malasakit.</span></div>
