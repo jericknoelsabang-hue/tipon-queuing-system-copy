@@ -802,7 +802,7 @@ function tiponStatus(message,error=false){const el=$('tiponFormStatus');if(!el)r
 function arrangeTiponFields(host) {
  const byTitle=new Map(Array.from(host.querySelectorAll('[data-tipon-title]'),el=>[el.dataset.tiponTitle,el]));
  const parts=['House No. / Street / Subdivision','Barangay','Municipality / City','Province'];
- const groups=[['Last Name','First Name','Middle Name','Suffix'],['Date of Birth','Place of Birth (City/Province)','Nationality'],['Gender','Civil Status','Religion'],['Blood Type','Height (cm)','Weight (kg)'],...['Present','Permanent'].flatMap(prefix=>[parts.slice(0,2),parts.slice(2)].map(pair=>pair.map(x=>prefix+' '+x))),['Mobile Number','Email / Gmail Address'],['SSS No.','PhilHealth No.'],['Pag-IBIG No.','TIN'],
+ const groups=[['Last Name','First Name','Middle Name','Suffix'],['Date of Birth','Place of Birth (City/Province)','Nationality'],['Gender','Civil Status','Religion'],['Blood Type','Height (cm)','Weight (kg)'],...['Present','Permanent'].flatMap(prefix=>(prefix==='Present'?[[parts[0],parts[3]],[parts[2],parts[1]]]:[parts.slice(0,2),parts.slice(2)]).map(pair=>pair.map(x=>prefix+' '+x))),['Mobile Number','Email / Gmail Address'],['SSS No.','PhilHealth No.'],['Pag-IBIG No.','TIN'],
   ["Father's Name\n(Last Name, First Name Middle Name)","Father's Mobile Number/ Email","Father's Address"],
   ["Mother's Maiden Name\n(Last Name, First Name Middle Name)","Mother's  Mobile Number/ Email","Mother's Address"],
   ["Spouse's Name\n(Last Name, First Name Middle Name)","Spouse's  Mobile Number/ Email","Spouse's Address"],
@@ -868,9 +868,42 @@ function arrangeTiponFields(host) {
   select.addEventListener('focus',fill);
   if(endpoint==='barangays')byTitle.get(prefix+' Municipality / City')?.addEventListener('change',()=>{select.value='';select.length=1;delete select.dataset.path});
  }
+ if(same){
+  const question=same.closest('.tipon-question');
+  const row=document.createElement('div');
+  row.className='tipon-field-row';row.style.setProperty('--count',2);
+  const label=document.createElement('label');label.className='field tipon-question';
+  label.textContent='Present ZIP Code';
+  const zip=document.createElement('input');zip.readOnly=true;zip.dataset.tiponTitle='Present ZIP Code';
+  label.append(zip);question.before(row);row.append(label,question);
+  const controls=['Province','Municipality / City','Barangay'].map(part=>byTitle.get('Present '+part));
+  async function updateZip(){
+   const [province,city,barangay]=controls.map(el=>el?.value||'');
+   zip.value='';zip.placeholder='Select the province and city';
+   if(!province||!city)return;
+   zip.placeholder='Looking up ZIP code…';
+   try{
+    if(!tiponPostalDirectory)tiponPostalDirectory=fetch('./postal-directory.json').then(r=>{if(!r.ok)throw Error();return r.json()}).then(data=>data.rows).catch(error=>{tiponPostalDirectory=null;throw error});
+    const rows=await tiponPostalDirectory;
+    if(controls.some((el,i)=>el?.value!==[province,city,barangay][i]))return;
+    zip.value=resolveTiponZip(rows,province,city,barangay);
+    zip.placeholder=zip.value?'':barangay?'No verified match':'Select a barangay';
+   }catch{zip.placeholder='ZIP lookup unavailable'}
+  }
+  controls.forEach(el=>el?.addEventListener('change',updateZip));updateZip();
+ }
  same?.addEventListener('change',refresh);
  for(const part of parts)byTitle.get('Present '+part)?.addEventListener('input',sync);
  refresh();
+}
+let tiponPostalDirectory;
+function resolveTiponZip(rows,province,city,barangay){
+ const norm=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\([^)]*\)/g,'').replace(/\b(city of|city|municipality of|barangay|brgy)\b/g,'').replace(/[^a-z0-9]/g,'');
+ const p=norm(province),c=norm(city),b=norm(barangay);
+ const candidates=rows.filter(row=>norm(row[0])===p&&norm(row[1])===c);
+ const specific=b?candidates.filter(row=>row[2]&&norm(row[2])===b):[];
+ const codes=new Set((specific.length?specific:candidates).map(row=>row[3]));
+ return codes.size===1?[...codes][0]:'';
 }
 const tiponLocationCache=new Map();
 function tiponLocations(path){
