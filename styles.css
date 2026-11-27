@@ -1566,6 +1566,11 @@ header.site-header::before{
 .tipon-form-fields .tipon-question{min-width:0}
 .tipon-form-fields .tipon-question.wide{grid-column:1/-1}
 .tipon-form-fields .tipon-question input,.tipon-form-fields .tipon-question select,.tipon-form-fields .tipon-question textarea{width:100%;margin-top:5px;padding:10px 11px;border:1px solid #cbdfe9;border-radius:9px;background:#fbfdff;color:#204a5f;min-height:42px}
+.tipon-form-fields .tipon-question input[type="checkbox"]{width:17px;min-height:17px;height:17px;margin:2px 0 0;flex:0 0 17px;accent-color:#087eaa}
+.tipon-form-fields .tipon-question .tipon-choice-list{display:flex;flex-wrap:wrap;gap:10px}
+.tipon-form-fields .tipon-certification-question .tipon-choice-list{display:block;margin-top:4px}
+.tipon-form-fields .tipon-certification-question .tipon-choice-list label{display:flex;align-items:flex-start;gap:9px;font-weight:600;line-height:1.55;color:#24495d}
+.tipon-form-fields .tipon-certification-question .tipon-choice-list input[type="checkbox"]{margin-top:3px}
 .tipon-form-fields .tipon-question textarea{min-height:76px}
 .tipon-form-fields .tipon-question fieldset{border:1px solid #dce8ef;border-radius:9px;margin:5px 0 0;padding:9px;display:flex;flex-wrap:wrap;gap:9px}
 .tipon-form-fields .tipon-question fieldset label{font-weight:600;display:flex;gap:5px;align-items:center}
@@ -1583,3 +1588,13 @@ header.site-header::before{
 #staff .window-actions.standard{grid-template-columns:repeat(4,minmax(0,1fr))}
 #staff .window-actions.standard>.btn{min-width:0;white-space:nowrap}
 @media(max-width:700px){#staff .window-actions.standard{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.completed-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:18px 0 8px;padding:14px;background:#f5faff;border:1px solid var(--line);border-radius:12px}
+.completed-toolbar .field{min-width:190px;margin:0}
+.completed-toolbar .completed-select-all{display:flex;align-items:center;gap:8px;min-height:42px;font-weight:700;color:var(--deep)}
+.completed-toolbar .completed-select-all input,.pdf-select-cell input{width:17px;height:17px;accent-color:#087eaa}
+.pdf-select-cell{text-align:center;width:76px}
+.pdf-select-cell input{cursor:pointer}
+.pdf-select-cell input:disabled{cursor:not-allowed;opacity:.45}
+#completedPdfStatus{min-height:20px;margin:8px 0}
+@media(max-width:700px){.completed-toolbar{align-items:stretch}.completed-toolbar .field{min-width:100%}.completed-toolbar>.btn{width:100%}}

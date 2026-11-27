@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=18.2">
-<script defer src="config.js?v=queue-database-20261126"></script><script defer src="public-online-bridge.js?v=4" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=16.10-tipon-validation"></script>
+<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=16.11-pdf-flow"></script>
 
 
 </head><body>
@@ -96,7 +96,14 @@
       <div class="table-bottom"><span id="onlineQueueShowing" class="table-count">Showing 0–0 of 0</span></div>
     </div>
     <div class="card queue-table-card hide" id="queueCompletedCard"><div class="split"><div><h2 id="completedQueueHeading">Completed Queue</h2><p id="completedQueueDescription">Completed transactions across all service windows, newest first.</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Purpose</th><th>Pre Check By</th><th>Recruiter</th><th>Remarks</th></tr></thead><tbody id="ct"></tbody></table></div>
+      <div class="completed-toolbar">
+        <label class="field" for="completedDateFilter">Date<input id="completedDateFilter" type="date"></label>
+        <label class="field" for="completedTransactionFilter">Transaction<select id="completedTransactionFilter"><option value="">All transactions</option><option value="NH">New Hire</option><option value="RH">Rehire</option><option value="TR">Transfer</option><option value="MC">Member Concerns</option></select></label>
+        <label class="completed-select-all"><input id="completedSelectAll" type="checkbox"> Select all eligible</label>
+        <button id="generateCompletedPdfs" class="btn primary" type="button" disabled>Generate PDF</button>
+      </div>
+      <p id="completedPdfStatus" class="small-muted" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Queue</th><th>Name</th><th>Transaction</th><th>Purpose</th><th>Pre Check By</th><th>Recruiter</th><th>Remarks</th><th>Select</th><th>PDF Status</th></tr></thead><tbody id="ct"></tbody></table></div>
       <div class="table-bottom"><span id="completedShowing" class="table-count">Showing 0–0 of 0</span><div class="pager"><button id="completedPrev" class="btn sm ghost" type="button">Previous</button><span id="completedPage">Page 1 of 1</span><button id="completedNext" class="btn sm ghost" type="button">Next</button></div></div>
     </div>
   </section>
@@ -119,6 +126,22 @@
         <label class="field" for="editTxName">Transaction Name<input id="editTxName" maxlength="60"></label>
         <div class="buttons"><button id="saveTx" class="btn success" type="button">Save Changes</button><button id="cancelTx" class="btn ghost" type="button">Cancel</button></div>
       </div>
+    </div>
+    <div class="card" id="pdfTemplateSetup">
+      <div class="split"><div><h2>PDF Generation</h2><p>Add a Google Docs template or upload a Word template. Completed New Hire and Rehire records can use these templates to create PDFs in Google Drive.</p></div><button id="refreshPdfTemplates" class="btn ghost" type="button">Refresh templates</button></div>
+      <p class="setup-guide"><b>Template placeholders:</b> In your document, add tokens such as <code>{{Applicant Name}}</code>, <code>{{Queue Number}}</code>, or <code>{{First Name}}</code>. Tokens match the column headers in <code>ONLINE_APPLICATIONS</code>. One active template per transaction type is supported.</p>
+      <div class="inline-editor" id="pdfTemplateEditor">
+        <div class="grid">
+          <label class="field" for="pdfTemplateCode">Template Code<input id="pdfTemplateCode" maxlength="24" placeholder="e.g. NH-APPLICATION" autocomplete="off"></label>
+          <label class="field" for="pdfTemplateType">Template Type<select id="pdfTemplateType"><option value="NH">New Hire (NH)</option><option value="RH">Rehire (RH)</option><option value="BOTH">Both (NH and RH)</option></select></label>
+          <label class="field" for="pdfTemplateDocId">Google Docs template link or ID<input id="pdfTemplateDocId" placeholder="Paste the Google Docs template link or file ID"></label>
+          <label class="field" for="pdfTemplateFile">Or upload a Word template (.doc/.docx)<input id="pdfTemplateFile" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+          <label class="field" for="pdfTemplateFolder">Optional destination folder ID<input id="pdfTemplateFolder" placeholder="Leave blank to use the private TIPON PDF folder"></label>
+        </div>
+        <div class="buttons"><button id="savePdfTemplate" class="btn success" type="button">Add PDF Template</button></div>
+      </div>
+      <p id="pdfTemplateSetupStatus" class="small-muted" role="status" aria-live="polite"></p>
+      <div class="table-wrap"><table><thead><tr><th>Template Code</th><th>Template Type</th><th>Template</th><th>Actions</th></tr></thead><tbody id="pdfTemplateRows"><tr><td colspan="4" class="empty">Loading PDF templates…</td></tr></tbody></table></div>
     </div>
     <div class="card"><h2>TV Announcement</h2><p>Editable message synchronized to the TV display through Google Sheets.</p>
       <label class="field" for="announcementInput">Announcement message<textarea id="announcementInput" maxlength="2500" rows="5" placeholder="Type the announcement"></textarea></label>

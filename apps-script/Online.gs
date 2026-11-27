@@ -3,6 +3,10 @@ const ONLINE_HEADERS = ['ID','Token digest','Submitted at','Transaction','Name',
 const ONLINE_RECORDS_SHEET = 'ONLINE_RECORDS';
 const ONLINE_DOCUMENTS_SHEET = 'ONLINE_DOCUMENTS';
 const ONLINE_MESSAGES_SHEET = 'ONLINE_MESSAGES';
+const ONLINE_PDF_TEMPLATES_SHEET = 'PDF_TEMPLATES';
+const ONLINE_PDF_LOG_SHEET = 'PDF_GENERATION';
+const ONLINE_PDF_TEMPLATE_HEADERS = ['Code','Template Type','Template File ID','Template Name','Destination Folder ID','Active','Created At'];
+const ONLINE_PDF_LOG_HEADERS = ['Ticket ID','Queue Number','Applicant Reference','Template Code','Template Type','PDF File ID','PDF URL','Generated At','Status'];
 
 function initializeOnlineQueue() {
   const props = PropertiesService.getScriptProperties();
@@ -12,6 +16,8 @@ function initializeOnlineQueue() {
   ensureOnlineSheet_(queue,ONLINE_RECORDS_SHEET,ONLINE_HEADERS);
   ensureOnlineSheet_(queue,ONLINE_DOCUMENTS_SHEET,['Application','File ID','Filename']);
   ensureOnlineSheet_(queue,ONLINE_MESSAGES_SHEET,['Application','Author','Message','Sent at']);
+  ensureOnlineSheet_(queue,ONLINE_PDF_TEMPLATES_SHEET,ONLINE_PDF_TEMPLATE_HEADERS);
+  ensureOnlineSheet_(queue,ONLINE_PDF_LOG_SHEET,ONLINE_PDF_LOG_HEADERS);
 
   const answers=onlineAnswersSheet_(props);
   if (!props.getProperty('ONLINE_FOLDER')) props.setProperty('ONLINE_FOLDER', DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
@@ -19,6 +25,9 @@ function initializeOnlineQueue() {
   const access=folder.getSharingAccess();
   if(access===DriveApp.Access.ANYONE||access===DriveApp.Access.ANYONE_WITH_LINK)
     throw Error('The applicant upload folder must use restricted sharing.');
+  if(!props.getProperty('ONLINE_PDF_FOLDER'))props.setProperty('ONLINE_PDF_FOLDER',DriveApp.createFolder('TIPON TAWAG Generated Recruitment PDFs').getId());
+  const pdfFolder=DriveApp.getFolderById(props.getProperty('ONLINE_PDF_FOLDER'));
+  if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(pdfFolder.getSharingAccess()))throw Error('The generated PDF folder must use restricted sharing.');
   if (!props.getProperty('ONLINE_ONSITE_KEY')) props.setProperty('ONLINE_ONSITE_KEY', onlineToken_());
 
   const migrated=migrateLegacyOnlineStore_(props,queue);
@@ -88,8 +97,8 @@ function onlineActiveTiponTicket_(d) {
   if(!/^[a-f0-9-]{36}$/i.test(id)||!Number.isInteger(window)||window<1)throw Error('Select the active queue ticket first.');
   const book=ss_(),queue=book.getSheetByName(CFG.queue);
   if(!queue||queue.getLastRow()<2)throw Error('The active queue ticket is unavailable.');
-  const rows=queue.getRange(2,1,queue.getLastRow()-1,QH.length).getDisplayValues();
-  const row=rows.find(item=>String(item[0])===id);
+  const match=queue.getRange(2,1,queue.getLastRow()-1,1).createTextFinder(id).matchEntireCell(true).findNext();
+  const row=match?queue.getRange(match.getRow(),1,1,QH.length).getDisplayValues()[0]:null;
   if(!row||String(row[8]).toUpperCase()!=='SERVING'||Number(row[9])!==window)throw Error('Tipon Form is available only for the ticket currently serving at this window.');
   const transaction=String(row[4]||'').toUpperCase();
   if(!['NH','RH','TR'].includes(transaction))throw Error('Tipon Form is only available for New Hire, Rehire, and Transfer.');
@@ -103,33 +112,47 @@ function onlineApplicationSheetRow_(sheet,id) {
   const headers=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim());
   const idColumn=headers.indexOf('Application ID');
   if(idColumn<0)return null;
-  const rows=sheet.getRange(2,1,sheet.getLastRow()-1,sheet.getLastColumn()).getDisplayValues();
-  const index=rows.findIndex(row=>String(row[idColumn])===String(id));
-  return index<0?null:{headers,row:rows[index],sheetRow:index+2};
+  const match=sheet.getRange(2,idColumn+1,sheet.getLastRow()-1,1).createTextFinder(String(id)).matchEntireCell(true).findNext();
+  return !match?null:{headers,row:sheet.getRange(match.getRow(),1,1,sheet.getLastColumn()).getDisplayValues()[0],sheetRow:match.getRow()};
 }
 
-function onlineTiponProfile_(ticket,all,answersSheet) {
-  const existingIndex=all.findIndex(row=>String(row[0])===ticket.id&&!row._deleted&&row[6]!=='Deleted');
-  if(existingIndex>=0)return {profile:JSON.parse(all[existingIndex][5]||'{}'),recordIndex:existingIndex};
+function onlineTiponProfile_(ticket,apps,answersSheet) {
+  const found=apps&&apps.getLastRow()>1?apps.getRange(2,1,apps.getLastRow()-1,1).createTextFinder(ticket.id).matchEntireCell(true).findNext():null;
+  const recordRow=found?found.getRow():0,record=recordRow?apps.getRange(recordRow,1,1,ONLINE_HEADERS.length).getDisplayValues()[0]:null;
+  const existingIndex=record&&String(record[6])!=='Deleted'?recordRow-2:-1;
+  if(existingIndex>=0){
+    const profile=JSON.parse(record[5]||'{}'),saved=onlineApplicationSheetRow_(answersSheet,ticket.id);
+    const metadata=new Set(['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links','PDF Generation Status','Generated PDF URL','Generated PDF At','Generated PDF Template Code']);
+    if(saved)for(let i=0;i<saved.headers.length;i++)if(!metadata.has(saved.headers[i]))profile[saved.headers[i]]=String(saved.row[i]||'');
+    return {profile,recordIndex:existingIndex,recordRow,record};
+  }
   const saved=onlineApplicationSheetRow_(answersSheet,ticket.id);
   const profile={};
+  const metadata=new Set(['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links','PDF Generation Status','Generated PDF URL','Generated PDF At','Generated PDF Template Code']);
   if(saved)for(let i=0;i<saved.headers.length;i++){
     const key=saved.headers[i];
-    if(!['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links'].includes(key))profile[key]=String(saved.row[i]||'');
+    if(!metadata.has(key))profile[key]=String(saved.row[i]||'');
   }
   const bits=String(ticket.row[6]||'').trim().split(/\s+/);
   if(!profile['First Name'])profile['First Name']=bits.length>1?bits.slice(0,-1).join(' '):bits[0]||'';
   if(!profile['Last Name'])profile['Last Name']=bits.length>1?bits.at(-1):'';
-  return {profile,recordIndex:-1};
+  return {profile,recordIndex:-1,recordRow:0,record:null};
 }
 
-function onlineGetTiponForm_(d,all,answersSheet) {
+function onlineGetTiponForm_(d,apps,answersSheet) {
   onlineStaff_();
-  const ticket=onlineActiveTiponTicket_(d),stored=onlineTiponProfile_(ticket,all,answersSheet);
+  const ticket=onlineActiveTiponTicket_(d);
+  const stored=onlineTiponProfile_(ticket,apps,answersSheet),profile=stored.profile;
   const fields=onlineFields_();
   return {id:ticket.id,window:ticket.window,transaction:ticket.transaction,queueNo:ticket.queueNo,
-    name:String(ticket.row[6]||''),purpose:String(ticket.row[7]||''),answers:stored.profile,fields,
+    name:String(ticket.row[6]||''),purpose:String(ticket.row[7]||''),answers:profile,fields,
     recordExists:stored.recordIndex>=0};
+}
+
+function onlineTiponFormStatus_(d,apps,answersSheet) {
+  onlineStaff_();
+  const ticket=onlineActiveTiponTicket_(d),stored=onlineTiponProfile_(ticket,apps,answersSheet);
+  return {id:ticket.id,saved:Boolean(stored.profile['Photo URL']&&stored.profile['Signature URL']),recordExists:stored.recordIndex>=0};
 }
 
 function onlineSaveCapture_(props,ticketId,kind,data) {
@@ -159,7 +182,11 @@ function onlineUpsertTiponAnswers_(sheet,ticket,profile,name,stage) {
     'Appointment (PHT)':saved?.row[saved.headers.indexOf('Appointment (PHT)')]||'',
     'Queue Number':ticket.queueNo,
     'Uploaded File Names':saved?.row[saved.headers.indexOf('Uploaded File Names')]||'',
-    'Uploaded File Links':saved?.row[saved.headers.indexOf('Uploaded File Links')]||''
+    'Uploaded File Links':saved?.row[saved.headers.indexOf('Uploaded File Links')]||'',
+    'PDF Generation Status':saved?.row[saved.headers.indexOf('PDF Generation Status')]||'',
+    'Generated PDF URL':saved?.row[saved.headers.indexOf('Generated PDF URL')]||'',
+    'Generated PDF At':saved?.row[saved.headers.indexOf('Generated PDF At')]||'',
+    'Generated PDF Template Code':saved?.row[saved.headers.indexOf('Generated PDF Template Code')]||''
   };
   const values={...metadata,...profile},previous=sheet.getLastRow()?sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim()):[];
   const headers=[...new Set([...previous,...Object.keys(values)])];
@@ -171,11 +198,11 @@ function onlineUpsertTiponAnswers_(sheet,ticket,profile,name,stage) {
   else sheet.appendRow(rowValues);
 }
 
-function onlineSaveTiponForm_(props,d,all,apps,answersSheet) {
+function onlineSaveTiponForm_(props,d,apps,answersSheet) {
   onlineStaff_();
   const ticket=onlineActiveTiponTicket_(d),fields=onlineFields_().filter(field=>field.id);
   if(!d.answers||typeof d.answers!=='object'||Array.isArray(d.answers))throw Error('Complete the Tipon Form fields.');
-  const profile=onlineTiponProfile_(ticket,all,answersSheet).profile;
+  const stored=onlineTiponProfile_(ticket,apps,answersSheet),profile=stored.profile;
   for(const field of fields){
     const raw=d.answers[field.title];
     const value=Array.isArray(raw)?raw.map(item=>onlineText_(item,500)).filter(Boolean):onlineText_(raw,1500);
@@ -190,12 +217,12 @@ function onlineSaveTiponForm_(props,d,all,apps,answersSheet) {
   profile['Photo URL']=photoUrl;profile['Signature URL']=signatureUrl;
   const first=String(profile['First Name']||'').trim(),last=String(profile['Last Name']||'').trim();
   const name=[first,last].filter(Boolean).join(' ')||String(ticket.row[6]||'');
-  const existingIndex=all.findIndex(row=>String(row[0])===ticket.id&&!row._deleted&&row[6]!=='Deleted');
+  const existingIndex=stored.recordIndex;
   let stage='Tipon Form Saved';
   if(existingIndex>=0){
-    const original=all[existingIndex];stage=String(original[6]||'Review');
-    apps.getRange(existingIndex+2,4,1,3).setValues([[ticket.transaction,name,JSON.stringify(profile)].map(value=>"'"+String(value))]);
-    const updated=apps.getRange(existingIndex+2,1,1,ONLINE_HEADERS.length).getValues()[0];
+    const original=stored.record;stage=String(original[6]||'Review');
+    apps.getRange(stored.recordRow,4,1,3).setValues([[ticket.transaction,name,JSON.stringify(profile)].map(value=>"'"+String(value))]);
+    const updated=apps.getRange(stored.recordRow,1,1,ONLINE_HEADERS.length).getValues()[0];
     saveOnlineApplicantAnswers_(props,updated,answersSheet);
   }else onlineUpsertTiponAnswers_(answersSheet,ticket,profile,name,stage);
   SpreadsheetApp.flush();
@@ -211,7 +238,7 @@ function onlineMergeSheetAnswers_(records, sheet) {
   const idColumn=headers.indexOf('Application ID');
   if(idColumn<0)return records.map(row=>{row._deleted=true;return row;});
   const answerById=new Map(values.slice(1).filter(row=>row[idColumn]).map(row=>[String(row[idColumn]),row]));
-  const metadata=new Set(['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links']);
+  const metadata=new Set(['Application ID','Submitted at (UTC)','Recruitment Transaction','Applicant Name','Application Status','Appointment (PHT)','Queue Number','Uploaded File Names','Uploaded File Links','PDF Generation Status','Generated PDF URL','Generated PDF At','Generated PDF Template Code']);
   return records.map(row=>{
     const answer=answerById.get(String(row[0]));
     if(!answer){row._deleted=true;return row;}
@@ -255,12 +282,16 @@ function onlineStaff_() {
 }
 
 function onlineFields_() {
+  const cache=CacheService.getScriptCache(),cacheKey='ONLINE_FORM_FIELDS_V2',cached=cache.get(cacheKey);
+  if(cached){try{return JSON.parse(cached)}catch(e){cache.remove(cacheKey)}}
+  const persisted=PropertiesService.getScriptProperties().getProperty('ONLINE_FORM_FIELDS_JSON');
+  if(persisted){try{const parsed=JSON.parse(persisted);cache.put(cacheKey,persisted,21600);return parsed}catch(e){PropertiesService.getScriptProperties().deleteProperty('ONLINE_FORM_FIELDS_JSON')}}
   const data = FormApp.openById(ONLINE_FORM_ID).getItems();
   const converters = {
     TEXT:'asTextItem',PARAGRAPH_TEXT:'asParagraphTextItem',DATE:'asDateItem',DATETIME:'asDateTimeItem',TIME:'asTimeItem',
     LIST:'asListItem',MULTIPLE_CHOICE:'asMultipleChoiceItem',CHECKBOX:'asCheckboxItem'
   };
-  return data.map(item=>{
+  const fields=data.map(item=>{
     const type=String(item.getType());
     if (['SECTION_HEADER','PAGE_BREAK'].includes(type)) return {type,title:item.getTitle()};
     if (['IMAGE','VIDEO'].includes(type)) return null;
@@ -270,6 +301,151 @@ function onlineFields_() {
       required:question.isRequired(),choices:question.getChoices?question.getChoices().map(choice=>choice.getValue()):[],
       other:question.hasOtherOption?question.hasOtherOption():false};
   }).filter(Boolean);
+  const json=JSON.stringify(fields);
+  cache.put(cacheKey,json,21600);
+  // Script Properties limit each value to about 9 KB; persist only a safe-sized schema.
+  if(json.length<8000)PropertiesService.getScriptProperties().setProperty('ONLINE_FORM_FIELDS_JSON',json);
+  return fields;
+}
+
+function onlineFindHeaderRow_(sheet,headerName,value) {
+  if(!sheet||sheet.getLastRow()<2)return null;
+  const headers=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0].map(item=>String(item||'').trim());
+  const index=headers.indexOf(headerName);
+  if(index<0)return null;
+  const found=sheet.getRange(2,index+1,sheet.getLastRow()-1,1).createTextFinder(String(value)).matchEntireCell(true).findNext();
+  return found?{headers,row:sheet.getRange(found.getRow(),1,1,sheet.getLastColumn()).getDisplayValues()[0],sheetRow:found.getRow()}:null;
+}
+
+function onlinePdfTemplateRows_(sheet) {
+  return onlineRead_(sheet).filter(row=>String(row[5]).toUpperCase()!=='FALSE'&&String(row[5]).toUpperCase()!=='NO')
+    .map(row=>({code:String(row[0]||''),type:String(row[1]||''),fileId:String(row[2]||''),name:String(row[3]||''),folderId:String(row[4]||'')}));
+}
+
+function onlineEnsurePdfInfrastructure_(props,data) {
+  ensureOnlineSheet_(data,ONLINE_PDF_TEMPLATES_SHEET,ONLINE_PDF_TEMPLATE_HEADERS);
+  ensureOnlineSheet_(data,ONLINE_PDF_LOG_SHEET,ONLINE_PDF_LOG_HEADERS);
+  if(!props.getProperty('ONLINE_PDF_FOLDER'))props.setProperty('ONLINE_PDF_FOLDER',DriveApp.createFolder('TIPON TAWAG Generated Recruitment PDFs').getId());
+  const folder=DriveApp.getFolderById(props.getProperty('ONLINE_PDF_FOLDER'));
+  if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(folder.getSharingAccess()))throw Error('Generated PDF storage must use restricted sharing.');
+}
+
+function onlinePdfTemplateFor_(templates,transaction) {
+  const code=String(transaction||'').toUpperCase();
+  const exact=templates.filter(item=>item.type===code),both=templates.filter(item=>item.type==='BOTH');
+  const matches=exact.length?exact:both;
+  if(!matches.length)return null;
+  if(matches.length>1)throw Error('More than one active PDF template matches '+code+'. Keep only one active template for each transaction type.');
+  return matches[0];
+}
+
+function onlineSavePdfTemplate_(d,props,sheet) {
+  const code=String(d.code||'').trim().toUpperCase().slice(0,24),type=String(d.templateType||'').trim().toUpperCase();
+  const name=onlineText_(d.filename||'TIPON recruitment PDF template',150);
+  if(!/^[A-Z0-9_-]{2,24}$/.test(code)||!['NH','RH','BOTH'].includes(type))throw Error('Enter a valid template code and select New Hire, Rehire, or Both.');
+  const rows=onlineRead_(sheet);
+  if(rows.some(row=>String(row[0]).toUpperCase()===code&&String(row[5]).toUpperCase()!=='FALSE'))throw Error('An active template already uses this code.');
+  let fileId=String(d.templateId||'').trim();
+  const urlMatch=fileId.match(/\/document\/d\/([A-Za-z0-9_-]+)/)||fileId.match(/[?&]id=([A-Za-z0-9_-]+)/);
+  if(urlMatch)fileId=urlMatch[1];
+  let file;
+  if(d.fileData){
+    const mime=String(d.fileMime||''),encoded=String(d.fileData||'');
+    if(!['application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/msword'].includes(mime)||encoded.length>7000000)throw Error('Upload a Word template (.doc or .docx) up to 5 MB.');
+    const bytes=Utilities.base64Decode(encoded);
+    if(!bytes.length||bytes.length>5*1024*1024)throw Error('Template file must be 5 MB or smaller.');
+    const parent=props.getProperty('ONLINE_FOLDER');
+    if(!parent)throw Error('Online Queue storage has not been initialized.');
+    const converted=Drive.Files.create({name:'TIPON-PDF-TEMPLATE-'+code,mimeType:'application/vnd.google-apps.document',parents:[parent]},Utilities.newBlob(bytes,mime,name),{fields:'id,mimeType'});
+    fileId=String(converted.id||'');
+  }
+  if(!fileId)throw Error('Paste a Google Docs template link or upload a Word template.');
+  try{file=DriveApp.getFileById(fileId)}catch(e){throw Error('The template file could not be opened. Check its Drive ID and permissions.')}
+  if(file.getMimeType()!=='application/vnd.google-apps.document')throw Error('Use a Google Docs template or upload a Word document for conversion.');
+  const folderId=String(d.folderId||'').trim();
+  if(folderId){try{const destination=DriveApp.getFolderById(folderId);if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(destination.getSharingAccess()))throw Error('The PDF destination folder must use restricted sharing.')}catch(e){if(String(e.message||e).includes('restricted'))throw e;throw Error('The destination folder ID is invalid or inaccessible.')}}
+  sheet.appendRow([code,type,fileId,file.getName(),folderId||'',true,new Date().toISOString()]);
+  SpreadsheetApp.flush();
+  return {ok:true,template:{code,type,name:file.getName(),fileId}};
+}
+
+function onlinePdfStatuses_(d,data) {
+  const tickets=Array.isArray(d.tickets)?d.tickets.slice(0,100):[];
+  const answers=data.getSheetByName('ONLINE_APPLICATIONS'),log=data.getSheetByName(ONLINE_PDF_LOG_SHEET),templates=onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET));
+  const history=onlineRead_(log),latest=new Map();
+  history.forEach(row=>latest.set(String(row[0]),row));
+  const result={};
+  for(const ticket of tickets){
+    const id=String(ticket?.ticketId||''),queueNo=String(ticket?.queueNo||''),transaction=String(ticket?.transaction||'').toUpperCase();
+    if(!/^[a-f0-9-]{36}$/i.test(id)||!new RegExp('^(?:OL)?'+transaction+'[-_]').test(queueNo)||!['NH','RH'].includes(transaction))continue;
+    const generated=latest.get(id);
+    if(generated&&String(generated[8]).toLowerCase()==='generated'){
+      result[id]={status:'Generated',url:String(generated[6]||''),templateCode:String(generated[3]||''),available:false};continue;
+    }
+    const answer=onlineFindHeaderRow_(answers,'Queue Number',queueNo),template=onlinePdfTemplateFor_(templates,transaction);
+    const answerStatus=answer&&answer.headers.includes('PDF Generation Status')?String(answer.row[answer.headers.indexOf('PDF Generation Status')]||''):'';
+    const answerUrl=answer&&answer.headers.includes('Generated PDF URL')?String(answer.row[answer.headers.indexOf('Generated PDF URL')]||''):'';
+    if(answerStatus.toLowerCase()==='generated'&&answerUrl){result[id]={status:'Generated',url:answerUrl,templateCode:answer.row[answer.headers.indexOf('Generated PDF Template Code')]||'',available:false};continue}
+    result[id]={status:!answer?'Tipon Form missing':!template?'Template not configured':'Not generated',url:'',templateCode:template?.code||'',available:Boolean(answer&&template)};
+  }
+  return result;
+}
+
+function onlineReplaceTemplate_(fileId,profile) {
+  const doc=DocumentApp.openById(fileId),containers=[doc.getBody(),doc.getHeader(),doc.getFooter()].filter(Boolean);
+  const values={...profile};
+  Object.keys(values).forEach(key=>{
+    const escaped=String(key).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    const pattern='\\{\\{'+escaped+'\\}\\}';
+    const replacement=Array.isArray(values[key])?values[key].join(', '):String(values[key]??'');
+    containers.forEach(container=>container.replaceText(pattern,replacement.replace(/\$/g,'\\$')));
+  });
+  doc.saveAndClose();
+}
+
+function onlineGeneratePdfs_(d,props,data) {
+  onlineStaff_();
+  const tickets=Array.isArray(d.tickets)?d.tickets.slice(0,10):[];
+  if(!tickets.length)throw Error('Select one to ten completed New Hire or Rehire records.');
+  const queue=data.getSheetByName(CFG.queue),answers=data.getSheetByName('ONLINE_APPLICATIONS'),templates=onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)),log=data.getSheetByName(ONLINE_PDF_LOG_SHEET);
+  const answerHeaders=answers.getRange(1,1,1,answers.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim());
+  const queueColumn=answerHeaders.indexOf('Queue Number'),appRefColumn=answerHeaders.indexOf('Applicant Reference No.');
+  const generated=[];
+  for(const ticket of tickets){
+    const id=String(ticket?.ticketId||''),queueNo=String(ticket?.queueNo||''),transaction=String(ticket?.transaction||'').toUpperCase();
+    if(!/^[a-f0-9-]{36}$/i.test(id)||!['NH','RH'].includes(transaction)||!new RegExp('^(?:OL)?'+transaction+'[-_]').test(queueNo))throw Error('Only completed New Hire and Rehire queue numbers can be generated.');
+    const queueMatch=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,1).createTextFinder(id).matchEntireCell(true).findNext():null;
+    if(!queueMatch||String(queue.getRange(queueMatch.getRow(),9).getDisplayValue()).toUpperCase()!=='COMPLETED')throw Error(queueNo+' is not in Completed Queue.');
+    const existing=onlineRead_(log).find(row=>String(row[0])===id&&String(row[8]).toLowerCase()==='generated');
+    if(existing)throw Error(queueNo+' already has a generated PDF.');
+    const answer=onlineFindHeaderRow_(answers,'Queue Number',queueNo);
+    if(!answer)throw Error('No ONLINE_APPLICATIONS form data was found for '+queueNo+'.');
+    const template=onlinePdfTemplateFor_(templates,transaction);
+    if(!template)throw Error('No active PDF template is configured for '+transaction+'.');
+    const outputFolderId=template.folderId||props.getProperty('ONLINE_PDF_FOLDER');
+    const folder=DriveApp.getFolderById(outputFolderId);
+    const name=String(answer.row[answerHeaders.indexOf('Applicant Name')]||queueNo).replace(/[\\/:*?"<>|#]+/g,' ').slice(0,90);
+    const working=DriveApp.getFileById(template.fileId).makeCopy('TIPON-TEMP-'+queueNo+'-'+Date.now(),folder);
+    let pdfFile;
+    try{
+      const profile={};answerHeaders.forEach((header,i)=>{profile[header]=String(answer.row[i]||'')});
+      profile['Queue Number']=queueNo;profile['Applicant Reference No.']=appRefColumn>=0?String(answer.row[appRefColumn]||''):'';
+      onlineReplaceTemplate_(working.getId(),profile);
+      pdfFile=folder.createFile(working.getAs(MimeType.PDF).setName('TIPON-'+queueNo+'-'+name+'.pdf'));
+    }catch(error){working.setTrashed(true);throw error}
+    working.setTrashed(true);
+    const stamp=new Date().toISOString(),ref=appRefColumn>=0?String(answer.row[appRefColumn]||''):'';
+    log.appendRow([id,queueNo,ref,template.code,transaction,pdfFile.getId(),pdfFile.getUrl(),stamp,'Generated']);
+    const extra={'PDF Generation Status':'Generated','Generated PDF URL':pdfFile.getUrl(),'Generated PDF At':stamp,'Generated PDF Template Code':template.code};
+    let lastCol=answers.getLastColumn(),headers=answerHeaders;
+    const added=Object.keys(extra).filter(key=>!headers.includes(key));
+    if(added.length){answers.getRange(1,lastCol+1,1,added.length).setValues([added]);headers=headers.concat(added);lastCol+=added.length}
+    const updates=Object.keys(extra).map(key=>[headers.indexOf(key)+1,extra[key]]);
+    updates.forEach(([col,value])=>answers.getRange(answer.sheetRow,col).setValue(value));
+    generated.push({ticketId:id,queueNo,url:pdfFile.getUrl(),templateCode:template.code,status:'Generated'});
+  }
+  SpreadsheetApp.flush();
+  return {ok:true,generated};
 }
 
 function onlineRead_(sheet) {
@@ -299,9 +475,9 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  const staffActions=['list','complete','deleteApplication','getTiponForm','saveTiponForm','readStaff','onsiteLink','download','sendMessage'];
+  const staffActions=['list','complete','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','complete','book','arrive','confirmArrival','saveTiponForm','sendMessage','sendApplicantMessage'];
+  const mutations=['submit','upload','complete','book','arrive','confirmArrival','saveTiponForm','sendMessage','sendApplicantMessage','savePdfTemplate','deletePdfTemplate','generatePdfs'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -315,13 +491,26 @@ function onlineOperate_(action,d,staff) {
   const files=data.getSheetByName(ONLINE_DOCUMENTS_SHEET);
   const messages=data.getSheetByName(ONLINE_MESSAGES_SHEET);
   if(!apps||!files||!messages) throw Error('Run initializeOnlineQueue() before using Online Recruitment.');
-  const rawRecords=onlineRead_(apps), answersSheet=data.getSheetByName('ONLINE_APPLICATIONS');
+  const answersSheet=data.getSheetByName('ONLINE_APPLICATIONS');
+  if(action==='tiponFormStatus')return onlineTiponFormStatus_(d,apps,answersSheet);
+  if(action==='getTiponForm')return onlineGetTiponForm_(d,apps,answersSheet);
+  if(['listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'].includes(action))onlineEnsurePdfInfrastructure_(props,data);
+  if(action==='listPdfTemplates')return onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)).map(({code,type,name,fileId,folderId})=>({code,type,name,fileId,folderId}));
+  if(action==='savePdfTemplate')return onlineSavePdfTemplate_(d,props,data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET));
+  if(action==='deletePdfTemplate'){
+    const code=String(d.code||'').trim().toUpperCase(),sheet=data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET),rows=onlineRead_(sheet),index=rows.findIndex(row=>String(row[0]).toUpperCase()===code&&String(row[5]).toUpperCase()!=='FALSE');
+    if(index<0)throw Error('Active PDF template not found.');
+    sheet.getRange(index+2,6).setValue(false);return {ok:true,code};
+  }
+  if(action==='getPdfStatuses')return onlinePdfStatuses_(d,data);
+  if(action==='generatePdfs')return onlineGeneratePdfs_(d,props,data);
+  const rawRecords=onlineRead_(apps);
   const all=onlineMergeSheetAnswers_(rawRecords,answersSheet), url=props.getProperty('ONLINE_PUBLIC_URL')||ScriptApp.getService().getUrl();
   const now=new Date(), today=day_();
   if(action==='onsiteLink') return url+'?online=onsite&site='+props.getProperty('ONLINE_ONSITE_KEY');
   const fileList=id=>onlineRead_(files).filter(file=>file[0]===id);
   if(action==='getTiponForm')return onlineGetTiponForm_(d,all,answersSheet);
-  if(action==='saveTiponForm')return onlineSaveTiponForm_(props,d,all,apps,answersSheet);
+  if(action==='saveTiponForm')return onlineSaveTiponForm_(props,d,apps,answersSheet);
   if(action==='list') {
     const docs=onlineRead_(files);
     return all.filter(row=>!row._deleted&&row[6]!=='Deleted').slice().reverse().map(row=>({id:row[0],date:row[2],transaction:row[3],name:row[4],stage:row[6],
@@ -466,7 +655,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','getTiponForm','saveTiponForm','readStaff','onsiteLink','download','sendMessage']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
+    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
     const pages=window.top!==window?window.top:window.opener;
     if(pages){
       window.addEventListener('message',event=>{
@@ -495,6 +684,8 @@ function saveOnlineApplicantAnswers_(props, row, destination) {
   const profile=JSON.parse(row[5]||'{}');
   const documentsSheet=ss_().getSheetByName(ONLINE_DOCUMENTS_SHEET);
   const documents=documentsSheet?onlineRead_(documentsSheet).filter(file=>String(file[0])===String(row[0])):[];
+  const prior=onlineApplicationSheetRow_(sheet,row[0]);
+  const priorValue=key=>prior?String(prior.row[prior.headers.indexOf(key)]||''):'';
   const metadata={
     'Application ID':row[0],
     'Submitted at (UTC)':row[2],
@@ -504,7 +695,11 @@ function saveOnlineApplicantAnswers_(props, row, destination) {
     'Appointment (PHT)':row[7]||'',
     'Queue Number':row[9]||'',
     'Uploaded File Names':documents.map(file=>file[2]).join('\\n'),
-    'Uploaded File Links':documents.map(file=>'https://drive.google.com/file/d/'+file[1]+'/view').join('\\n')
+    'Uploaded File Links':documents.map(file=>'https://drive.google.com/file/d/'+file[1]+'/view').join('\\n'),
+    'PDF Generation Status':priorValue('PDF Generation Status'),
+    'Generated PDF URL':priorValue('Generated PDF URL'),
+    'Generated PDF At':priorValue('Generated PDF At'),
+    'Generated PDF Template Code':priorValue('Generated PDF Template Code')
   };
   const answers={...metadata,...profile};
   const previous=sheet.getLastRow()?sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0]:[];

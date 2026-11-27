@@ -11,6 +11,9 @@ let lastGuideCue=null,guideDirty=false;let armed=localStorage.getItem('tqSound')
 let remarksTimer=null,remarksSaveQueue=Promise.resolve(),remarksDraft={ticketId:'',value:''},remarksSaved={ticketId:'',value:''},remarksQueued={ticketId:'',value:''};
 let onlineApplications=[],onlineQueueLoading=false,onlineQueueLastLoaded=0,onlineQueueError='';
 const tiponFormSaved=new Map(),tiponFormChecks=new Set();
+const completedPdfStatus=new Map(),completedPdfSelection=new Set();
+let completedFilterDate='',completedFilterTransaction='',pdfStatusRequest='';
+let pdfTemplates=[],pdfTemplatesLoadedAt=0;
 const queueBoards={};
 for(const [stage,prefix,emptyText] of [
   ['precheck','precheckQueue','No queues waiting for pre-checking.'],
@@ -440,11 +443,13 @@ function queueTables(){
     const label=key==='wait'?'wait':key==='done'?'precheckDone':'completed';
     const cells=rows.map(x=>{
       const base='<td>'+esc(dateDisplay(x))+'</td><td><b>'+esc(x.queueNo)+'</b></td><td>'+esc(x.name)+'</td><td>'+esc(x.transactionName)+'</td><td>'+esc(x.position)+'</td>';
+      const pdf=completedPdfStatus.get(String(x.ticketId))||{status:isPdfEligible(x)?'Checking…':'Not eligible',available:false};
+      const selectable=key==='completed'&&isPdfEligible(x)&&pdf.available;
       const extra=key==='done'?'<td>'+esc(x.precheckedBy||'—')+'</td>':
-        key==='completed'?'<td>'+esc(x.precheckedBy||'—')+'</td><td>'+esc(x.recruiter||'—')+'</td><td class="completed-remarks">'+esc(x.remarks||'—')+'</td>':'';
+        key==='completed'?'<td>'+esc(x.precheckedBy||'—')+'</td><td>'+esc(x.recruiter||'—')+'</td><td class="completed-remarks">'+esc(x.remarks||'—')+'</td><td class="pdf-select-cell"><input type="checkbox" data-pdf-select value="'+esc(x.ticketId)+'" aria-label="Select '+esc(x.queueNo)+' for PDF"'+(selectable?'':' disabled')+(completedPdfSelection.has(String(x.ticketId))?' checked':'')+'></td><td>'+(pdf.url?'<a href="'+esc(pdf.url)+'" target="_blank" rel="noopener">Generated</a>':esc(pdf.status))+'</td>':'';
       return '<tr>'+base+extra+'</tr>';
     }).join('');
-    const columns=key==='completed'?8:key==='done'?6:5;
+    const columns=key==='completed'?10:key==='done'?6:5;
     const emptyText=key==='wait'?'waiting':key==='done'?'done Pre-check':'completed';
     $(bodyId).innerHTML=rows.length?cells:'<tr><td colspan="'+columns+'" class="empty">No '+emptyText+' applicants or members.</td></tr>';
     $(label+'Showing').textContent='Showing '+(count?p*size+1:0)+'–'+Math.min((p+1)*size,count)+' of '+count;
@@ -453,13 +458,50 @@ function queueTables(){
   };
   waitPage=make(S.waiting||[],waitPage,'wait','wt');
   precheckDonePage=make(S.precheckDone||[],precheckDonePage,'done','precheckDoneBody');
-  completedPage=make(S.completed||[],completedPage,'completed','ct');
+  const allCompleted=S.completed||[];
+  const filtered=allCompleted.filter(ticket=>(!completedFilterDate||String(ticket.date||ticket.createdAt||'').slice(0,10)===completedFilterDate)&&(!completedFilterTransaction||String(ticket.transaction||'').toUpperCase()===completedFilterTransaction));
+  completedPage=make(filtered,completedPage,'completed','ct');
+  requestCompletedPdfStatuses(filtered);
+  bindCompletedPdfControls(filtered);
+}
+function filteredCompleted(){return(S.completed||[]).filter(ticket=>(!completedFilterDate||String(ticket.date||ticket.createdAt||'').slice(0,10)===completedFilterDate)&&(!completedFilterTransaction||String(ticket.transaction||'').toUpperCase()===completedFilterTransaction))}
+function isPdfEligible(ticket){return ['NH','RH'].includes(String(ticket?.transaction||'').toUpperCase())&&new RegExp('^(?:OL)?'+String(ticket.transaction).toUpperCase()+'[-_]').test(String(ticket?.queueNo||''))}
+async function requestCompletedPdfStatuses(tickets){
+ const eligible=tickets.filter(isPdfEligible),signature=JSON.stringify(eligible.map(ticket=>ticket.ticketId));
+ if(!eligible.length||signature===pdfStatusRequest||typeof window.onlineRequest!=='function')return;
+ pdfStatusRequest=signature;
+ try{const result=await window.onlineRequest('getPdfStatuses',{tickets:eligible.map(ticket=>({ticketId:ticket.ticketId,queueNo:ticket.queueNo,transaction:ticket.transaction}))});
+  Object.entries(result||{}).forEach(([id,value])=>completedPdfStatus.set(id,value));
+  tableSignature.completed='';queueTables();
+ }catch(error){pdfStatusRequest='';const status=$('completedPdfStatus');if(status)status.textContent='PDF status could not be refreshed: '+String(error?.message||error)}
+}
+function bindCompletedPdfControls(filtered){
+ const all=$('completedSelectAll'),generate=$('generateCompletedPdfs');if(!all||!generate)return;
+ const eligible=filtered.filter(ticket=>isPdfEligible(ticket)&&completedPdfStatus.get(String(ticket.ticketId))?.available);
+ all.checked=Boolean(eligible.length&&eligible.every(ticket=>completedPdfSelection.has(String(ticket.ticketId))));
+ all.disabled=!eligible.length;
+ generate.disabled=!completedPdfSelection.size||!connectionHealthy;
+ all.onchange=()=>{eligible.forEach(ticket=>all.checked?completedPdfSelection.add(String(ticket.ticketId)):completedPdfSelection.delete(String(ticket.ticketId)));tableSignature.completed='';queueTables()};
+ generate.onclick=async()=>{
+  const tickets=(S.completed||[]).filter(ticket=>completedPdfSelection.has(String(ticket.ticketId)));
+  if(!tickets.length)return;
+  generate.disabled=true;generate.textContent='Generating…';$('completedPdfStatus').textContent='Generating PDFs in Google Drive…';
+  try{const result=await window.onlineRequest('generatePdfs',{tickets:tickets.map(ticket=>({ticketId:ticket.ticketId,queueNo:ticket.queueNo,transaction:ticket.transaction}))});
+   (result?.generated||[]).forEach(item=>{completedPdfStatus.set(item.ticketId,{status:'Generated',url:item.url,available:false});completedPdfSelection.delete(item.ticketId)});
+   $('completedPdfStatus').textContent=(result?.generated||[]).length+' PDF(s) generated and saved to Google Drive.';tableSignature.completed='';queueTables();
+  }catch(error){$('completedPdfStatus').textContent=String(error?.message||error||'PDF generation failed.');}
+  finally{generate.textContent='Generate PDF';generate.disabled=!completedPdfSelection.size||!connectionHealthy}
+ };
 }
 function setupTables(){
   const connected=Boolean(S.version),writable=COMPATIBLE.has(S.version);
   const list=(Array.isArray(S.transactionTypes)&&S.transactionTypes.length?S.transactionTypes:Array.isArray(S.transactions)?S.transactions:[]).filter(x=>x.active!==false);
   $('addTx').disabled=!writable;
   $('openAddTx').disabled=!writable;
+  if(page==='setup'){
+    if(Date.now()-pdfTemplatesLoadedAt>60000)void loadPdfTemplates();
+    bindPdfTemplateControls();
+  }
   $('setupTx').innerHTML=list.length?list.map(x=>{
     return '<tr><td><b>'+esc(x.code)+'</b></td><td>'+esc(x.name)+'</td><td>Active</td><td class="actions-cell">'+
       '<button class="btn sm" type="button" data-edit-tx="'+esc(x.code)+'"'+(!writable?' disabled':'')+'>Edit</button>'+
@@ -481,6 +523,39 @@ function setupTables(){
     if(!result)setupTables();
     else status('Transaction '+code+' removed from active services. Previous queue records remain preserved.','ok');
   });
+}
+async function loadPdfTemplates(force=false){
+ if(typeof window.onlineRequest!=='function')return;
+ if(!force&&Date.now()-pdfTemplatesLoadedAt<60000)return;
+ const host=$('pdfTemplateRows');if(host&&!pdfTemplates.length)host.innerHTML='<tr><td colspan="4" class="empty">Loading PDF templates…</td></tr>';
+ try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates()}
+ catch(error){const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
+}
+function renderPdfTemplates(){
+ const host=$('pdfTemplateRows');if(!host)return;
+ host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.type)+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'">Deactivate</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No PDF templates configured.</td></tr>';
+ host.querySelectorAll('[data-pdf-delete]').forEach(button=>button.onclick=async()=>{
+  button.disabled=true;button.textContent='Updating…';
+  try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete});pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deactivated.'}
+  catch(error){button.disabled=false;button.textContent='Deactivate';$('pdfTemplateSetupStatus').textContent=String(error?.message||error)}
+ });
+}
+function bindPdfTemplateControls(){
+ const save=$('savePdfTemplate');if(!save||save.dataset.bound)return;save.dataset.bound='1';
+ $('refreshPdfTemplates').onclick=()=>void loadPdfTemplates(true);
+ save.onclick=async()=>{
+  const file=$('pdfTemplateFile').files?.[0],code=$('pdfTemplateCode').value.trim(),templateType=$('pdfTemplateType').value,templateId=$('pdfTemplateDocId').value.trim(),folderId=$('pdfTemplateFolder').value.trim();
+  if(!code||(!file&&!templateId)){ $('pdfTemplateSetupStatus').textContent='Enter a template code and provide a Google Docs template or Word file.';return }
+  save.disabled=true;save.textContent='Saving…';$('pdfTemplateSetupStatus').textContent=file?'Uploading and converting the Word template…':'Saving template…';
+  try{
+   const payload={code,templateType,templateId,folderId,filename:file?.name||'TIPON recruitment template'};
+   if(file){const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(Error('Could not read the selected Word file.'));reader.readAsDataURL(file)});payload.fileData=dataUrl.split(',')[1];payload.fileMime=file.type||(/\.docx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'application/msword')}
+   const result=await window.onlineRequest('savePdfTemplate',payload);
+   $('pdfTemplateCode').value='';$('pdfTemplateDocId').value='';$('pdfTemplateFolder').value='';$('pdfTemplateFile').value='';
+   pdfTemplatesLoadedAt=0;await loadPdfTemplates(true);$('pdfTemplateSetupStatus').textContent='Template '+result.template.code+' saved.';
+  }catch(error){$('pdfTemplateSetupStatus').textContent=String(error?.message||error||'Unable to save the template.')}
+  finally{save.disabled=false;save.textContent='Add PDF Template'}
+ };
 }
 function updateWindowAssignmentDropdown(){
   const menu=$('editWindowTxMenu');
@@ -687,9 +762,8 @@ function ensureTiponFormStatus(i,ticket){
  if(!id||!tiponEligibleTransaction(ticket)||tiponFormSaved.has(id)||tiponFormChecks.has(id))return;
  if(typeof window.onlineRequest!=='function'){tiponFormSaved.set(id,'required');return}
  tiponFormSaved.set(id,'checking');tiponFormChecks.add(id);
- window.onlineRequest('getTiponForm',{id,window:i}).then(result=>{
-  const answers=result?.answers||{};
-  tiponFormSaved.set(id,answers['Photo URL']&&answers['Signature URL']?'saved':'required');
+ window.onlineRequest('tiponFormStatus',{id,window:i}).then(result=>{
+  tiponFormSaved.set(id,result?.saved?'saved':'required');
  }).catch(()=>tiponFormSaved.set(id,'required')).finally(()=>{
   tiponFormChecks.delete(id);
   if(String(win(i)?.ticketId||'')===id){staffSignature='';staff();}
@@ -709,7 +783,8 @@ function tiponRenderFields(fields,answers){
    const selected=Array.isArray(value)?value:value?[value]:[];
    control='<div class="tipon-choice-list">'+(field.choices||[]).map(choice=>'<label><input type="checkbox" data-tipon-title="'+esc(field.title)+'" value="'+esc(choice)+'"'+(selected.includes(choice)?' checked':'')+'> '+esc(choice)+'</label>').join('')+(field.other?'<label><input type="checkbox" data-tipon-other-check="'+esc(field.id)+'" '+(selected.some(x=>!field.choices.includes(x))?'checked':'')+'> Other</label><input class="tipon-other" data-tipon-other="'+esc(field.id)+'" placeholder="Please specify" value="'+esc(selected.find(x=>!field.choices.includes(x))||'')+'" '+(selected.some(x=>!field.choices.includes(x))?'':'hidden')+'>':'')+'</div>';
   }else{const type=field.type==='DATE'?'date':field.type==='TIME'?'time':field.type==='DATETIME'?'datetime-local':'text';control=field.type==='PARAGRAPH_TEXT'?'<textarea data-tipon-title="'+esc(field.title)+'" rows="3"'+required+'>'+esc(value||'')+'</textarea>':'<input type="'+type+'" data-tipon-title="'+esc(field.title)+'" value="'+esc(value||'')+'"'+required+'>'}
-  return '<label class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+'"'+(field.required?' data-required="true"':'')+'><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</label>';
+  const tag=field.type==='CHECKBOX'?'div':'label',end=field.type==='CHECKBOX'?'div':'label';
+  return '<'+tag+' class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+(field.title.toLowerCase()==='certification'?' tipon-certification-question':'')+'"'+(field.required?' data-required="true"':'')+'><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</'+end+'>';
  }).join('');
  host.querySelectorAll('select').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]');if(other){other.hidden=el.value!=='__OTHER__';if(el.value!=='__OTHER__')other.value=''}});
  host.querySelectorAll('[data-tipon-other-check]').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]');if(other)other.hidden=!el.checked});
@@ -1121,6 +1196,9 @@ $('reconnect').onclick=()=>{
 $('test').onclick=async()=>{try{const r=await jp('health');if(!r.ok)throw Error(r.error);if(!COMPATIBLE.has(r.version))throw Error('Backend is '+(r.version||'outdated')+'. Deploy the latest Code.gs.');status('Backend verified • '+r.version+' • '+r.windows+' service windows.'+(r.version!==REQUIRED?' Update to v14 for direct Pre Checking completion.':''),'ok');await refresh(true)}catch(e){error(e)}};
 $('clear').onclick=()=>{localStorage.removeItem('tqApi');$('api').value='';S.version='';qrUrl='';status('Connection cleared.','err');qr()};
 $('backToWindows').onclick=()=>openStaffWindow(0);
+$('completedDateFilter').addEventListener('change',()=>{completedFilterDate=$('completedDateFilter').value;completedPage=0;pdfStatusRequest='';tableSignature.completed='';queueTables()});
+$('completedTransactionFilter').addEventListener('change',()=>{completedFilterTransaction=$('completedTransactionFilter').value;completedPage=0;pdfStatusRequest='';tableSignature.completed='';queueTables()});
+$('ct').addEventListener('change',event=>{const input=event.target.closest('[data-pdf-select]');if(!input)return;if(input.checked)completedPdfSelection.add(input.value);else completedPdfSelection.delete(input.value);bindCompletedPdfControls(filteredCompleted())});
 $('onlineQueueRefresh').onclick=()=>void refreshOnlineQueue(true);
 $('onlineQueueBody').addEventListener('click',event=>{
   const details=event.target.closest('[data-online-view]');
