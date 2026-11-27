@@ -761,18 +761,33 @@ function queueRemarksSave(i,ticketId,value){
 let tiponFormWindow=0,tiponFormTicket=null,tiponFormBusy=false,tiponPhotoData='',tiponSignatureDirty=false,tiponSignatureDrawing=false;
 function tiponEligibleTransaction(ticket){const code=String(ticket?.transaction||'').toUpperCase(),number=String(ticket?.queueNo||'').toUpperCase();return ['NH','RH','TR'].includes(code)||/^OL(?:NH|RH)\d/.test(number)}
 let pendingTiponRead;
+let lastPreparedTicket='';
 function readTiponForm(i,id){
- const key=i+':'+id;
- if(pendingTiponRead?.key===key)return pendingTiponRead.promise;
- const promise=window.onlineRequest('getTiponForm',{id,window:i});
- const entry={key,promise};
+ const key=JSON.stringify([url(),Number(i),String(id)]);
+ if(pendingTiponRead?.key===key&&Date.now()<pendingTiponRead.expires)return pendingTiponRead.promise;
+ const entry={key,expires:Infinity};
+ entry.promise=window.onlineRequest('getTiponForm',{id,window:i}).then(form=>{
+  if(!Array.isArray(form?.fields))throw Error('Unable to load applicant fields.');
+  entry.expires=Date.now()+60000;
+  return form;
+ }).catch(error=>{
+  if(pendingTiponRead===entry)pendingTiponRead=null;
+  throw error;
+ });
  pendingTiponRead=entry;
- promise.then(()=>setTimeout(()=>{if(pendingTiponRead===entry)pendingTiponRead=null},5000),()=>{if(pendingTiponRead===entry)pendingTiponRead=null});
- return promise;
+ return entry.promise;
 }
 function ensureTiponFormStatus(i,ticket){
  const id=String(ticket?.ticketId||'');
- if(!id||!tiponEligibleTransaction(ticket)||tiponFormSaved.has(id)||tiponFormChecks.has(id))return;
+ if(!id||!tiponEligibleTransaction(ticket))return;
+ if(Number(activeStaffWindow)===Number(i)&&connectionHealthy&&typeof window.onlineRequest==='function'){
+  const key=JSON.stringify([url(),Number(i),id]);
+  if(lastPreparedTicket!==key){
+   lastPreparedTicket=key;
+   readTiponForm(i,id).catch(()=>{});
+  }
+ }
+ if(tiponFormSaved.has(id)||tiponFormChecks.has(id))return;
  if(typeof window.onlineRequest!=='function'){tiponFormSaved.set(id,'required');return}
  tiponFormSaved.set(id,'checking');tiponFormChecks.add(id);
  (Number(activeStaffWindow)===Number(i)?readTiponForm(i,id).then(form=>({saved:Boolean(form.answers?.['Photo URL']&&form.answers?.['Signature URL'])})):window.onlineRequest('tiponFormStatus',{id,window:i})).then(result=>{
@@ -965,7 +980,7 @@ bindCaptureDevices(dialog,canvas);
  form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;form.dataset.validationAttempted='1';if(!validateTiponForm())return;
   const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
   tiponFormBusy=true;$('tiponFormSave').disabled=true;tiponStatus('Saving Tipon Form to ONLINE_APPLICATIONS…');
-  try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponFormSaved.set(String(tiponFormTicket.ticketId),'saved');staffSignature='';staff();tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
+  try{pendingTiponRead=null;const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponFormSaved.set(String(tiponFormTicket.ticketId),'saved');staffSignature='';staff();tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
   catch(error){tiponStatus(String(error?.message||error||'Unable to save Tipon Form.'),true)}finally{tiponFormBusy=false;$('tiponFormSave').disabled=false}
  };
 }
