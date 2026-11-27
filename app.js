@@ -784,6 +784,61 @@ function ensureTiponFormStatus(i,ticket){
 }
 function tiponAssignedWindow(value){const list=assignmentList(value);return list!=='ALL'&&list.some(code=>['NH','RH','TR'].includes(String(code).toUpperCase()))}
 function tiponStatus(message,error=false){const el=$('tiponFormStatus');if(!el)return;el.textContent=message;el.classList.remove('hide');el.classList.toggle('err',error)}
+function arrangeTiponFields(host) {
+ const byTitle=new Map(Array.from(host.querySelectorAll('[data-tipon-title]'),el=>[el.dataset.tiponTitle,el]));
+ const parts=['House No. / Street / Subdivision','Barangay','Municipality / City','Province'];
+ const groups=[['Last Name','First Name','Middle Name','Suffix'],['Date of Birth','Place of Birth (City/Province)','Nationality'],['Gender','Civil Status','Religion'],['Blood Type','Height (cm)','Weight (kg)'],...['Present','Permanent'].flatMap(prefix=>[parts.slice(0,2),parts.slice(2)].map(pair=>pair.map(x=>prefix+' '+x))),['Mobile Number','Email / Gmail Address'],['SSS No.','PhilHealth No.'],['Pag-IBIG No.','TIN']];
+ for(const titles of groups){
+  const labels=titles.map(t=>byTitle.get(t)?.closest('.tipon-question')).filter(Boolean);
+  if(!labels.length)continue;
+  const row=document.createElement('div');row.className='tipon-field-row';row.style.setProperty('--count',labels.length);
+  labels[0].before(row);row.append(...labels);
+ }
+ const same=[...byTitle].find(([key])=>key.startsWith('Is your permanent address'))?.[1];
+ const sync=()=>{if(!/^yes\b/i.test(same?.value||''))return;for(const part of parts){
+  const from=byTitle.get('Present '+part),to=byTitle.get('Permanent '+part);
+  if(!from||!to)continue;
+  if(to.tagName==='SELECT'&&from.value&&![...to.options].some(o=>o.value===from.value))to.add(new Option(from.value,from.value));
+  to.value=from.value;
+ }};
+ const refresh=()=>{for(const part of parts){const row=byTitle.get('Permanent '+part)?.closest('.tipon-field-row');if(row)row.hidden=Boolean(same&&!same.value)}sync()};
+ for(const prefix of ['Present','Permanent'])for(const [part,endpoint] of [['Province','provinces'],['Municipality / City','cities-municipalities'],['Barangay','barangays']]){
+  const key=prefix+' '+part,old=byTitle.get(key);if(!old)continue;
+  const select=document.createElement('select');select.dataset.tiponTitle=key;select.name=old.name;select.required=old.required;
+  select.add(new Option('Select '+part.toLowerCase(),''));if(old.value)select.add(new Option(old.value,old.value,true,true));
+  old.replaceWith(select);byTitle.set(key,select);
+  async function fill(){
+   if(select.dataset.busy)return;
+   select.dataset.busy='true';
+   try{
+    let path=endpoint;
+    if(endpoint==='barangays'){
+     const city=byTitle.get(prefix+' Municipality / City');
+     const cities=await tiponLocations('cities-municipalities');
+     const match=cities.filter(c=>c.name===city?.value);
+     if(match.length===1)path='cities-municipalities/'+match[0].code+'/barangays';
+    }
+    const locations=await tiponLocations(path);
+    if(select.dataset.path===path)return;
+    const current=select.value,names=[...new Set(locations.map(x=>x.name))].sort();
+    if(endpoint==='provinces'&&!names.includes('Metro Manila'))names.push('Metro Manila');
+    if(current&&!names.includes(current))names.unshift(current);
+    const frag=document.createDocumentFragment();for(const n of names)frag.append(new Option(n,n,false,n===current));
+    select.length=1;select.append(frag);select.dataset.path=path;
+   }catch{tiponStatus('Address list unavailable. Focus the field again to retry.',true)}finally{delete select.dataset.busy}
+  }
+  select.addEventListener('focus',fill);
+  if(endpoint==='barangays')byTitle.get(prefix+' Municipality / City')?.addEventListener('change',()=>{select.value='';select.length=1;delete select.dataset.path});
+ }
+ same?.addEventListener('change',refresh);
+ for(const part of parts)byTitle.get('Present '+part)?.addEventListener('input',sync);
+ refresh();
+}
+const tiponLocationCache=new Map();
+function tiponLocations(path){
+ if(!tiponLocationCache.has(path))tiponLocationCache.set(path,fetch('https://psgc.gitlab.io/api/'+path+'/').then(r=>{if(!r.ok)throw Error();return r.json()}).catch(e=>{tiponLocationCache.delete(path);throw e}));
+ return tiponLocationCache.get(path);
+}
 function tiponRenderFields(fields,answers){
  const host=$('tiponFormFields');if(!host)return;
  host.innerHTML=(fields||[]).map(field=>{
@@ -799,6 +854,7 @@ function tiponRenderFields(fields,answers){
   const tag=field.type==='CHECKBOX'?'div':'label',end=field.type==='CHECKBOX'?'div':'label';
   return '<'+tag+' class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+(field.title.toLowerCase()==='certification'?' tipon-certification-question':'')+'"'+(field.required?' data-required="true"':'')+'><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</'+end+'>';
  }).join('');
+ arrangeTiponFields(host);
  host.querySelectorAll('select').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]');if(other){other.hidden=el.value!=='__OTHER__';if(el.value!=='__OTHER__')other.value=''}});
  host.querySelectorAll('[data-tipon-other-check]').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]');if(other)other.hidden=!el.checked});
 }
