@@ -530,8 +530,8 @@ async function loadPdfTemplates(force=false){
  if(pdfTemplatesLoadPromise)return pdfTemplatesLoadPromise;
  const host=$('pdfTemplateRows');if(host&&!pdfTemplates.length)host.innerHTML='<tr><td colspan="4" class="empty">Loading PDF templates…</td></tr>';
  pdfTemplatesLoadPromise=(async()=>{
-  try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates()}
-  catch(error){const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
+  try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent=''}
+  catch(error){if(host&&!pdfTemplates.length){host.innerHTML='<tr><td colspan="4"><button type="button" class="btn sm">Retry loading templates</button></td></tr>';host.querySelector('button').onclick=()=>loadPdfTemplates(true)}const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
   finally{pdfTemplatesLoadPromise=null}
  })();
  return pdfTemplatesLoadPromise;
