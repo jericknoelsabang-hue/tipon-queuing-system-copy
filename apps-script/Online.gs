@@ -436,6 +436,11 @@ function onlineGeneratePdfs_(d,props,data) {
       onlineReplaceTemplate_(working.getId(),profile);
       const convention=String(template.namingConvention||'{{Applicant Name}} - {{Queue Number}} - Pre-employment Requirements');
       let pdfName=convention.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,key)=>String(profile[key]||''));
+      if (/_EMPLOYEENO$/i.test(convention)) {
+        const key = Object.keys(profile).find(key => /^employee(no|number|id)$/.test(key.toLowerCase().replace(/[^a-z0-9]/g,'')) && String(profile[key]).trim());
+        if (!key) throw Error('Enter the employee number in the applicant record before generating this PDF.');
+        pdfName = pdfName.replace(/EMPLOYEENO$/i, () => String(profile[key]).trim());
+      }
       pdfName=pdfName.replace(/[\\/:*?"<>|#]+/g,' ').replace(/\s+/g,' ').trim().replace(/\.pdf$/i,'').slice(0,140)||name+' - '+queueNo+' - Pre-employment Requirements';
       pdfFile=folder.createFile(working.getAs(MimeType.PDF).setName(pdfName+'.pdf'));
     }catch(error){working.setTrashed(true);throw error}
@@ -501,7 +506,7 @@ function onlineOperate_(action,d,staff) {
   if(action==='tiponFormStatus')return onlineTiponFormStatus_(d,apps,answersSheet);
   if(action==='getTiponForm')return onlineGetTiponForm_(d,apps,answersSheet);
   if(['listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'].includes(action))onlineEnsurePdfInfrastructure_(props,data);
-  if(action==='listPdfTemplates')return onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)).map(({code,type,name,fileId,folderId})=>({code,type,name,fileId,folderId}));
+  if(action==='listPdfTemplates')return onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)).map(({code,type,name,fileId,folderId,namingConvention})=>({code,type,name,fileId,folderId,namingConvention}));
   if(action==='savePdfTemplate')return onlineSavePdfTemplate_(d,props,data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET));
   if(action==='deletePdfTemplate'){
     const code=String(d.code||'').trim().toUpperCase(),sheet=data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET),rows=onlineRead_(sheet),index=rows.findIndex(row=>String(row[0]).toUpperCase()===code&&String(row[5]).toUpperCase()!=='FALSE');
