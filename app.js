@@ -878,6 +878,18 @@ function tiponRenderFields(fields,answers){
   return '<'+tag+' class="field tipon-question'+(['PARAGRAPH_TEXT','CHECKBOX'].includes(field.type)?' wide':'')+(field.title.toLowerCase()==='certification'?' tipon-certification-question':'')+'"'+(field.required?' data-required="true"':'')+'><span>'+esc(field.title)+star+'</span>'+control+(field.help?'<small>'+esc(field.help)+'</small>':'')+'</'+end+'>';
  }).join('');
  arrangeTiponFields(host);
+ let card=null;
+ for(const node of Array.from(host.children)){
+  if(node.classList.contains('tipon-section')){
+   card=null;
+   if(!/^[A-G]\./i.test(node.textContent.trim()))continue;
+   card=document.createElement('fieldset');
+   card.className='tipon-section-card';
+   const legend=document.createElement('legend');legend.textContent=node.textContent;
+   node.replaceWith(card);card.append(legend);
+  }else if(node.classList.contains('tipon-certification-question'))card=null;
+  else if(card)card.append(node);
+ }
  host.querySelectorAll('select').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.name.slice(6)+'"]');if(other){other.hidden=el.value!=='__OTHER__';if(el.value!=='__OTHER__')other.value=''}});
  host.querySelectorAll('[data-tipon-other-check]').forEach(el=>el.onchange=()=>{const other=host.querySelector('[data-tipon-other="'+el.dataset.tiponOtherCheck+'"]');if(other)other.hidden=!el.checked});
 }
@@ -1360,16 +1372,44 @@ function bindCaptureDevices(formDialog, canvas) {
    source.value=next.getVideoTracks()[0].getSettings().deviceId;
   }catch(err){if(token===generation){camera.close();tiponStatus('Unable to open camera. '+err.message,true)}}
  }
- $('openCamera').onclick=()=>{camera.showModal();preview()};
+ $('openCamera').onclick=()=>{$('portraitStatus').textContent='';camera.showModal();preview()};
  source.onchange=()=>preview(source.value);
  $('closeCamera').onclick=()=>camera.close();
  camera.addEventListener('close',stopCamera);
- $('takePhoto').onclick=()=>{
+ let portraitModel;
+ async function whitenPortrait(photo){
+  const base='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304';
+  if(!portraitModel)portraitModel=import(base+'/vision_bundle.mjs').then(async sdk=>sdk.ImageSegmenter.createFromOptions(await sdk.FilesetResolver.forVisionTasks(base+'/wasm'),{
+   baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/1/selfie_multiclass_256x256.tflite'},
+   runningMode:'IMAGE',outputConfidenceMasks:true,outputCategoryMask:false
+  })).catch(error=>{portraitModel=null;throw error});
+  const model=await portraitModel;
+  model.segment(photo,result=>{
+   const mask=result.confidenceMasks[0],background=mask.getAsFloat32Array();
+   const ctx=photo.getContext('2d'),pixels=ctx.getImageData(0,0,photo.width,photo.height);
+   for(let y=0;y<photo.height;y++)for(let x=0;x<photo.width;x++){
+    const b=background[Math.floor(y*mask.height/photo.height)*mask.width+Math.floor(x*mask.width/photo.width)];
+    const alpha=Math.min(1,Math.max(0,(b-.15)/.7));
+    const i=4*(y*photo.width+x);
+    for(let c=0;c<3;c++)pixels.data[i+c]=(1-alpha)*((pixels.data[i+c]-128)*1.05+135)+alpha*255;
+   }
+   ctx.putImageData(pixels,0,0);
+  });
+ }
+ $('takePhoto').onclick=async()=>{
   if(!video.videoWidth||!stream)return;
   const photo=document.createElement('canvas');
   photo.width=Math.min(1024,video.videoWidth);
   photo.height=Math.round(photo.width*video.videoHeight/video.videoWidth);
   photo.getContext('2d').drawImage(video,0,0,photo.width,photo.height);
+  const token=generation;
+  $('takePhoto').disabled=true;
+  $('portraitStatus').textContent='Preparing your photo…';
+  try{await whitenPortrait(photo)}
+  catch{if(camera.open&&token===generation)$('portraitStatus').textContent='Photo processing failed. Check your connection and take the photo again.';return}
+  finally{$('takePhoto').disabled=false}
+  if(!camera.open||token!==generation)return;
+  $('portraitStatus').textContent='';
   tiponPhotoData=photo.toDataURL('image/jpeg',0.82);
   $('tiponPhotoPreview').src=tiponPhotoData;
   $('tiponPhotoPreview').hidden=false;
