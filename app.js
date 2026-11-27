@@ -840,7 +840,7 @@ function arrangeTiponFields(host) {
   to.value=from.value;
  }};
  const refresh=()=>{for(const part of parts){const row=byTitle.get('Permanent '+part)?.closest('.tipon-field-row');if(row)row.hidden=!/^no\b/i.test(same?.value||'')}sync()};
- for(const prefix of ['Present','Permanent'])for(const [part,endpoint] of [['Province','provinces'],['Municipality / City','cities-municipalities'],['Barangay','barangays']]){
+ for(const prefix of ['Permanent'])for(const [part,endpoint] of [['Province','provinces'],['Municipality / City','cities-municipalities'],['Barangay','barangays']]){
   const key=prefix+' '+part,old=byTitle.get(key);if(!old)continue;
   const select=document.createElement('select');select.dataset.tiponTitle=key;select.name=old.name;select.required=old.required;
   select.add(new Option('Select '+part.toLowerCase(),''));if(old.value)select.add(new Option(old.value,old.value,true,true));
@@ -868,6 +868,51 @@ function arrangeTiponFields(host) {
   select.addEventListener('focus',fill);
   if(endpoint==='barangays')byTitle.get(prefix+' Municipality / City')?.addEventListener('change',()=>{select.value='';select.length=1;delete select.dataset.path});
  }
+ const addressKeys=['Province','Municipality / City','Barangay'];
+ const presentControls=addressKeys.map(part=>{
+  const key='Present '+part,old=byTitle.get(key),select=document.createElement('select');
+  select.dataset.tiponTitle=key;select.name=old.name;select.required=old.required;
+  select.add(new Option('Select '+part.toLowerCase(),''));
+  if(old.value)select.add(new Option(old.value,old.value,true,true));
+  old.replaceWith(select);byTitle.set(key,select);return select;
+ });
+ const [provinceSelect,citySelect,barangaySelect]=presentControls;
+ let localities;
+ const locationName=v=>String(v||'').trim().toLocaleLowerCase().replace(/^city of | city$/g,'');
+ function options(select,values,current=''){
+  const unique=[...new Set(values)].sort((a,b)=>a.localeCompare(b));
+  const saved=unique.find(v=>locationName(v)===locationName(current))||current;
+  if(saved&&!unique.includes(saved))unique.unshift(saved);
+  select.length=1;
+  const fragment=document.createDocumentFragment();
+  for(const value of unique)fragment.append(new Option(value,value,false,value===saved));
+  select.append(fragment);select.value=saved;
+ }
+ function cityRows(){return localities.filter(row=>locationName(row[0])===locationName(provinceSelect.value))}
+ function setBarangays(current=''){
+  const matches=cityRows().filter(row=>locationName(row[1])===locationName(citySelect.value));
+  options(barangaySelect,matches.flatMap(row=>row[2]),current);
+  barangaySelect.disabled=!citySelect.value;
+ }
+ function setCities(current='',barangay=''){
+  options(citySelect,cityRows().map(row=>row[1]),current);
+  citySelect.disabled=!provinceSelect.value;setBarangays(barangay);
+ }
+ async function loadPresent(){
+  if(localities)return;
+  try{
+   tiponLocalities??=fetch('./address-localities.json').then(r=>{if(!r.ok)throw Error();return r.json()}).then(data=>data.rows).catch(error=>{tiponLocalities=null;throw error});
+   localities=await tiponLocalities;
+   options(provinceSelect,localities.map(row=>row[0]),provinceSelect.value);
+   setCities(citySelect.value,barangaySelect.value);
+   provinceSelect.dispatchEvent(new Event('input'));
+   barangaySelect.dispatchEvent(new Event('change'));
+  }catch{tiponStatus('Address directory unavailable. Select Province to retry.',true)}
+ }
+ provinceSelect.addEventListener('focus',loadPresent);
+ provinceSelect.addEventListener('change',()=>{if(localities){setCities();sync()}});
+ citySelect.addEventListener('change',()=>{if(localities){setBarangays();sync()}});
+ loadPresent();
  if(same){
   const question=same.closest('.tipon-question');
   const row=document.createElement('div');
@@ -896,7 +941,7 @@ function arrangeTiponFields(host) {
  for(const part of parts)byTitle.get('Present '+part)?.addEventListener('input',sync);
  refresh();
 }
-let tiponPostalDirectory;
+let tiponLocalities,tiponPostalDirectory;
 function resolveTiponZip(rows,province,city,barangay){
  const norm=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\([^)]*\)/g,'').replace(/\b(city of|city|municipality of|barangay|brgy)\b/g,'').replace(/[^a-z0-9]/g,'');
  const p=norm(province),c=norm(city),b=norm(barangay);
