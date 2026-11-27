@@ -889,17 +889,18 @@ async function openTiponForm(i){
  const dialog=$('tiponFormDialog');if(!dialog){staffMessage('Tipon Form panel is missing. Refresh the page.','err');tiponFormBusy=false;return}
  tiponBindDialog();
  $('tiponFormIdentity').textContent=(ticket.name||'Applicant')+' · '+(ticket.queueNo||'')+' · '+(ticket.transactionName||ticket.transaction||'');
- $('tiponFormFields').innerHTML='<p class="small-muted">Loading applicant information…</p>';$('tiponFormSave').disabled=true;$('tiponFormStatus').classList.add('hide');$('tiponPhotoFile').value='';$('tiponPhotoPreview').hidden=true;tiponPhotoData='';tiponSignatureDirty=false;
+ $('tiponFormFields').innerHTML='<p class="small-muted">Loading applicant information…</p>';$('tiponFormSave').disabled=true;$('tiponFormStatus').classList.add('hide');$('tiponPhotoSaved').textContent='';$('tiponCapture').hidden=true;$('tiponPhotoPreview').hidden=true;tiponPhotoData='';tiponSignatureDirty=false;
  const canvas=$('tiponSignaturePad');canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);$('tiponSignatureSaved').textContent='';
  delete $('tiponRecruitmentForm').dataset.validationAttempted;$('tiponRecruitmentForm').querySelectorAll('.tipon-invalid').forEach(node=>node.classList.remove('tipon-invalid'));if(!dialog.open)dialog.showModal();
+ $('tiponRecruitmentForm').scrollTop=0;dialog.scrollTop=0;
  try{const result=await readTiponForm(i,ticket.ticketId);if(!result||!Array.isArray(result.fields))throw Error('Apps Script returned an invalid Tipon Form.');
   tiponRenderFields(result.fields,result.answers||{});$('tiponFormIdentity').textContent=(result.name||ticket.name||'Applicant')+' · '+(result.queueNo||ticket.queueNo||'')+' · '+(result.transaction||ticket.transaction||'');
   tiponFormTicket.photoUrl=result.answers?.['Photo URL']||'';tiponFormTicket.signatureUrl=result.answers?.['Signature URL']||'';
   tiponFormSaved.set(String(ticket.ticketId),tiponFormTicket.photoUrl&&tiponFormTicket.signatureUrl?'saved':'required');
   staffSignature='';staff();
-  if(tiponFormTicket.photoUrl)$('tiponPhotoSaved').textContent='Existing photo saved. Choose a new photo to replace it.';
+  if(tiponFormTicket.photoUrl)$('tiponPhotoSaved').textContent='Existing photo saved. Capture a new photo to replace it.';
   if(tiponFormTicket.signatureUrl)$('tiponSignatureSaved').textContent='Existing signature saved. Draw again to replace it.';
-  $('tiponFormSave').disabled=false;
+  $('tiponCapture').hidden=false;$('tiponFormSave').disabled=false;
  }catch(error){const host=$('tiponFormFields');host.innerHTML='<button type="button" class="btn ghost">Retry loading form</button>';host.firstElementChild.onclick=()=>openTiponForm(i);tiponStatus(String(error?.message||error||'Unable to load Tipon Form.'),true)}finally{tiponFormBusy=false}
 }
 function tiponCollectAnswers(){
@@ -927,9 +928,9 @@ function validateTiponForm(focusFirst=true){
   const control=[...wrapper.querySelectorAll('input,select,textarea')].find(el=>!el.disabled&&!el.closest('[hidden]'));
   if(control&&(!String(control.value||'').trim()||!control.validity.valid))invalid(wrapper,control);
  });
- const photoBox=$('tiponPhotoFile')?.closest('.tipon-photo-box');
+ const photoBox=$('openCamera')?.closest('.tipon-photo-box');
  const signatureBox=$('tiponSignaturePad')?.closest('.tipon-signature-box');
- if(!tiponPhotoData&&!tiponFormTicket?.photoUrl)invalid(photoBox,$('tiponPhotoFile'));
+ if(!tiponPhotoData&&!tiponFormTicket?.photoUrl)invalid(photoBox,$('openCamera'));
  if(!tiponSignatureDirty&&!tiponFormTicket?.signatureUrl)invalid(signatureBox,$('tiponSignaturePad'));
  if(firstInvalid.length){
   tiponStatus('Complete the required fields highlighted in red, then capture the applicant photo and signature.',true);
@@ -949,10 +950,8 @@ bindCaptureDevices(dialog,canvas);
  canvas.onpointerdown=e=>{tiponSignatureDrawing=true;canvas.setPointerCapture(e.pointerId);const p=point(e),ctx=canvas.getContext('2d');ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';tiponSignatureDirty=true};
  canvas.onpointermove=e=>{if(tiponSignatureDrawing){const p=point(e),ctx=canvas.getContext('2d');ctx.lineTo(p.x,p.y);ctx.stroke()}};
  ['pointerup','pointercancel','lostpointercapture'].forEach(name=>canvas.addEventListener(name,()=>{tiponSignatureDrawing=false;if(form.dataset.validationAttempted==='1')validateTiponForm(false)}));
- $('tiponPhotoFile').onchange=async e=>{const file=e.target.files?.[0];if(!file)return;if(!/^image\/(jpeg|png)$/.test(file.type)){tiponStatus('Choose a JPEG or PNG photo.',true);e.target.value='';return}
-  try{const image=new Image(),url=URL.createObjectURL(file);image.src=url;await image.decode();const scale=Math.min(1,1200/Math.max(image.width,image.height)),out=document.createElement('canvas');out.width=Math.round(image.width*scale);out.height=Math.round(image.height*scale);out.getContext('2d').drawImage(image,0,0,out.width,out.height);tiponPhotoData=out.toDataURL('image/jpeg',.82);$('tiponPhotoPreview').src=tiponPhotoData;$('tiponPhotoPreview').hidden=false;$('tiponPhotoSaved').textContent='New photo ready to save.';URL.revokeObjectURL(url);if(form.dataset.validationAttempted==='1')validateTiponForm(false)}catch(error){tiponStatus('Could not read the selected photo.',true)}};
  form.onsubmit=async e=>{e.preventDefault();if(tiponFormBusy||!tiponFormTicket)return;form.dataset.validationAttempted='1';if(!validateTiponForm())return;
-  const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture or choose the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
+  const answers=tiponCollectAnswers(),signature=canvas.toDataURL('image/png');if(!tiponPhotoData&&!tiponFormTicket.photoUrl){tiponStatus('Capture the applicant photo before saving.',true);return}if(!tiponSignatureDirty&&!tiponFormTicket.signatureUrl){tiponStatus('Capture the applicant signature before saving.',true);return}
   tiponFormBusy=true;$('tiponFormSave').disabled=true;tiponStatus('Saving Tipon Form to ONLINE_APPLICATIONS…');
   try{const result=await window.onlineRequest('saveTiponForm',{id:tiponFormTicket.ticketId,window:tiponFormWindow,answers,photoData:tiponPhotoData,signatureData:tiponSignatureDirty?signature:''});tiponFormTicket.photoUrl=result.photoUrl;tiponFormTicket.signatureUrl=result.signatureUrl;tiponFormSaved.set(String(tiponFormTicket.ticketId),'saved');staffSignature='';staff();tiponStatus('Saved to ONLINE_APPLICATIONS.');setTimeout(()=>dialog.close(),800)}
   catch(error){tiponStatus(String(error?.message||error||'Unable to save Tipon Form.'),true)}finally{tiponFormBusy=false;$('tiponFormSave').disabled=false}
