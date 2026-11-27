@@ -333,7 +333,6 @@ function staff(){
   $('waitingQueueDescription').textContent='Applicants and members waiting across all service windows.';
   $('precheckDoneDescription').textContent='Applicants and members checked at Pre Checking who are waiting for an available service window.';
   $('completedQueueDescription').textContent='Completed transactions across all service windows, newest first.';
-  if(isOpen){$('windowConsoleTitle').textContent='Window '+activeStaffWindow+' Console';}
   if(signature===staffSignature)return;
   staffSignature=signature;
   if(!isOpen){
