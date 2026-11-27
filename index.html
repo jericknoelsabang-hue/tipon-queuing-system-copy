@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css?v=18.3">
-<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=tipon-capture-preview-4"></script>
+<script defer src="config.js?v=queue-database-20261127"></script><script defer src="public-online-bridge.js?v=5" data-mode="staff"></script><script defer src="vendor/qrcodejs/qrcode.min.js"></script><script defer src="queue-display.js?v=1.2"></script><script defer src="app.js?v=portrait-sections-1"></script>
 
 
 <style>
@@ -34,6 +34,19 @@
 #tiponCapture .tipon-photo-frame,#tiponSignaturePad{box-sizing:border-box;width:100%;height:150px;border:1px dashed #85aac0;border-radius:8px;background:white;display:block}
 #tiponCapture #tiponPhotoPreview:not([hidden]){width:100%;height:100%;margin:0;object-fit:contain}
 #tiponCapture :is(#openCamera,#connectStu){background:#0079a4;color:white;border-color:#0079a4}
+</style><style>
+#tiponFormFields .tipon-section-card{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:clamp(12px,2vw,22px);margin:0;min-width:0;border:1px solid #cbdfe9;border-radius:12px;background:#fff}
+.tipon-section-card legend{font-weight:750;color:#104662;padding:0 7px}
+#tiponFormFields .tipon-emergency-address{width:100%}
+#tiponFormFields textarea[data-tipon-title$="Reason for Leaving" i]{box-sizing:border-box;height:44px;min-height:44px;resize:vertical}
+#tiponCamera{box-sizing:border-box;width:min(540px,94vw);max-height:92dvh;padding:22px;border:1px solid #cbdfe9;border-radius:16px;color:#123c53;box-shadow:0 16px 64px #102c4266}
+#tiponCamera::backdrop{background:#12334699}
+#tiponCamera h2{margin:0 0 14px}
+#tiponCamera label{display:grid;gap:5px;font-weight:650}
+#tiponCamera select{width:100%;padding:9px;border:1px solid #abcbdc;border-radius:8px}
+#tiponCamera video{width:100%;aspect-ratio:4/3;object-fit:contain;background:#142936;border-radius:10px}
+#portraitStatus:empty{display:none}
+@media(max-width:540px){#tiponFormFields .tipon-section-card{grid-template-columns:1fr}}
 </style></head><body>
 <header class="site-header"><div class="head">
   <div class="brand"><img class="tipon-logo" id="brandPhoto" src="assets/tipon-logo-hd.webp" alt="tipón Federation logo">
@@ -216,6 +229,6 @@
       <div class="tipon-dialog-actions"><button id="tiponFormCancel" class="btn ghost" type="button">Cancel</button><button id="tiponFormSave" class="btn success" type="submit">Save Tipon Form</button></div>
     </form>
   </dialog>
-<dialog id="tiponCamera" aria-label="Capture applicant photo"><label>Camera <select id="cameraSource"></select></label><video autoplay playsinline muted></video><div class="tipon-device-actions"><button class="btn success" type="button" id="takePhoto">Take Photo</button><button class="btn ghost" type="button" id="closeCamera">Close</button></div></dialog></main>
+<dialog id="tiponCamera" aria-label="Capture applicant photo"><h2>Capture applicant photo</h2><label>Camera<select id="cameraSource"></select></label><video autoplay playsinline muted></video><p id="portraitStatus" role="status"></p><div class="tipon-device-actions"><button class="btn success" type="button" id="takePhoto">Take Photo</button><button class="btn ghost" type="button" id="closeCamera">Close</button></div></dialog></main>
 <footer class="footer">tipón TAWAG · Bawat tawag, may malasakit. · WIN AS A TEAM</footer>
 </body></html>
