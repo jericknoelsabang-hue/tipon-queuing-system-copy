@@ -13,7 +13,7 @@ let onlineApplications=[],onlineQueueLoading=false,onlineQueueLastLoaded=0,onlin
 const tiponFormSaved=new Map(),tiponFormChecks=new Set();
 const completedPdfStatus=new Map(),completedPdfSelection=new Set();
 let completedFilterDate='',completedFilterTransaction='',pdfStatusRequest='';
-let pdfTemplates=[],pdfTemplatesLoadedAt=0;
+let pdfTemplates=[],pdfTemplatesLoadedAt=0,pdfTemplatesLoadPromise=null;
 const queueBoards={};
 for(const [stage,prefix,emptyText] of [
   ['precheck','precheckQueue','No queues waiting for pre-checking.'],
@@ -527,9 +527,14 @@ function setupTables(){
 async function loadPdfTemplates(force=false){
  if(typeof window.onlineRequest!=='function')return;
  if(!force&&Date.now()-pdfTemplatesLoadedAt<60000)return;
+ if(pdfTemplatesLoadPromise)return pdfTemplatesLoadPromise;
  const host=$('pdfTemplateRows');if(host&&!pdfTemplates.length)host.innerHTML='<tr><td colspan="4" class="empty">Loading PDF templates…</td></tr>';
- try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates()}
- catch(error){const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
+ pdfTemplatesLoadPromise=(async()=>{
+  try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates()}
+  catch(error){const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
+  finally{pdfTemplatesLoadPromise=null}
+ })();
+ return pdfTemplatesLoadPromise;
 }
 function renderPdfTemplates(){
  const host=$('pdfTemplateRows');if(!host)return;
