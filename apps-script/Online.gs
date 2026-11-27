@@ -5,7 +5,8 @@ const ONLINE_DOCUMENTS_SHEET = 'ONLINE_DOCUMENTS';
 const ONLINE_MESSAGES_SHEET = 'ONLINE_MESSAGES';
 const ONLINE_PDF_TEMPLATES_SHEET = 'PDF_TEMPLATES';
 const ONLINE_PDF_LOG_SHEET = 'PDF_GENERATION';
-const ONLINE_PDF_TEMPLATE_HEADERS = ['Code','Template Type','Template File ID','Template Name','Destination Folder ID','Active','Created At'];
+const ONLINE_PDF_ROOT_FOLDER_ID = '1Gma29KL9HnJFScY7nf9u5O4eoSP9EPH3';
+const ONLINE_PDF_TEMPLATE_HEADERS = ['Code','Template Type','Template File ID','Template Name','Destination Folder ID','Active','Created At','Naming Convention'];
 const ONLINE_PDF_LOG_HEADERS = ['Ticket ID','Queue Number','Applicant Reference','Template Code','Template Type','PDF File ID','PDF URL','Generated At','Status'];
 
 function initializeOnlineQueue() {
@@ -25,8 +26,7 @@ function initializeOnlineQueue() {
   const access=folder.getSharingAccess();
   if(access===DriveApp.Access.ANYONE||access===DriveApp.Access.ANYONE_WITH_LINK)
     throw Error('The applicant upload folder must use restricted sharing.');
-  if(!props.getProperty('ONLINE_PDF_FOLDER'))props.setProperty('ONLINE_PDF_FOLDER',DriveApp.createFolder('TIPON TAWAG Generated Recruitment PDFs').getId());
-  const pdfFolder=DriveApp.getFolderById(props.getProperty('ONLINE_PDF_FOLDER'));
+  const pdfFolder=DriveApp.getFolderById(ONLINE_PDF_ROOT_FOLDER_ID);
   if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(pdfFolder.getSharingAccess()))throw Error('The generated PDF folder must use restricted sharing.');
   if (!props.getProperty('ONLINE_ONSITE_KEY')) props.setProperty('ONLINE_ONSITE_KEY', onlineToken_());
 
@@ -50,8 +50,15 @@ function ensureOnlineSheet_(book,name,headers) {
   } else {
     const width=Math.max(sheet.getLastColumn(),headers.length);
     const current=sheet.getRange(1,1,1,width).getDisplayValues()[0];
-    const matches=headers.every((header,index)=>String(current[index]||'').trim()===header);
-    if(!matches) throw Error('Unexpected header row in '+name+'. Existing data was not changed.');
+    const existing=current.slice(0,Math.max(0,sheet.getLastColumn())).map(value=>String(value||'').trim());
+    const missing=headers.filter(header=>!existing.includes(header));
+    const compatible=existing.every((header,index)=>!header||headers[index]===header);
+    if(!compatible) throw Error('Unexpected header row in '+name+'. Existing data was not changed.');
+    if(missing.length){
+      const start=sheet.getLastColumn()+1;
+      if(sheet.getMaxColumns()<start+missing.length-1)sheet.insertColumnsAfter(sheet.getMaxColumns(),start+missing.length-1-sheet.getMaxColumns());
+      sheet.getRange(1,start,1,missing.length).setValues([missing]);
+    }
   }
   sheet.setFrozenRows(1);
   return sheet;
@@ -319,15 +326,12 @@ function onlineFindHeaderRow_(sheet,headerName,value) {
 
 function onlinePdfTemplateRows_(sheet) {
   return onlineRead_(sheet).filter(row=>String(row[5]).toUpperCase()!=='FALSE'&&String(row[5]).toUpperCase()!=='NO')
-    .map(row=>({code:String(row[0]||''),type:String(row[1]||''),fileId:String(row[2]||''),name:String(row[3]||''),folderId:String(row[4]||'')}));
+    .map(row=>({code:String(row[0]||''),type:String(row[1]||''),fileId:String(row[2]||''),name:String(row[3]||''),folderId:'',namingConvention:String(row[7]||'')}));
 }
 
 function onlineEnsurePdfInfrastructure_(props,data) {
   ensureOnlineSheet_(data,ONLINE_PDF_TEMPLATES_SHEET,ONLINE_PDF_TEMPLATE_HEADERS);
   ensureOnlineSheet_(data,ONLINE_PDF_LOG_SHEET,ONLINE_PDF_LOG_HEADERS);
-  if(!props.getProperty('ONLINE_PDF_FOLDER'))props.setProperty('ONLINE_PDF_FOLDER',DriveApp.createFolder('TIPON TAWAG Generated Recruitment PDFs').getId());
-  const folder=DriveApp.getFolderById(props.getProperty('ONLINE_PDF_FOLDER'));
-  if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(folder.getSharingAccess()))throw Error('Generated PDF storage must use restricted sharing.');
 }
 
 function onlinePdfTemplateFor_(templates,transaction) {
@@ -340,11 +344,10 @@ function onlinePdfTemplateFor_(templates,transaction) {
 }
 
 function onlineSavePdfTemplate_(d,props,sheet) {
-  const code=String(d.code||'').trim().toUpperCase().slice(0,24),type=String(d.templateType||'').trim().toUpperCase();
+  const label=onlineText_(d.code||'',80),code=label.toUpperCase(),type='BOTH';
+  const naming=onlineText_(d.namingConvention||'',160)||'{{Applicant Name}} - {{Queue Number}} - Pre-employment Requirements';
   const name=onlineText_(d.filename||'TIPON recruitment PDF template',150);
-  if(!/^[A-Z0-9_-]{2,24}$/.test(code)||!['NH','RH','BOTH'].includes(type))throw Error('Enter a valid template code and select New Hire, Rehire, or Both.');
-  const rows=onlineRead_(sheet);
-  if(rows.some(row=>String(row[0]).toUpperCase()===code&&String(row[5]).toUpperCase()!=='FALSE'))throw Error('An active template already uses this code.');
+  if(!label||!naming)throw Error('Enter a pre-employment requirements label and naming convention.');
   let fileId=String(d.templateId||'').trim();
   const urlMatch=fileId.match(/\/document\/d\/([A-Za-z0-9_-]+)/)||fileId.match(/[?&]id=([A-Za-z0-9_-]+)/);
   if(urlMatch)fileId=urlMatch[1];
@@ -359,26 +362,24 @@ function onlineSavePdfTemplate_(d,props,sheet) {
     const converted=Drive.Files.create({name:'TIPON-PDF-TEMPLATE-'+code,mimeType:'application/vnd.google-apps.document',parents:[parent]},Utilities.newBlob(bytes,mime,name),{fields:'id,mimeType'});
     fileId=String(converted.id||'');
   }
-  if(!fileId)throw Error('Paste a Google Docs template link or upload a Word template.');
+  if(!fileId)throw Error('Upload a Word template (.doc or .docx).');
   try{file=DriveApp.getFileById(fileId)}catch(e){throw Error('The template file could not be opened. Check its Drive ID and permissions.')}
   if(file.getMimeType()!=='application/vnd.google-apps.document')throw Error('Use a Google Docs template or upload a Word document for conversion.');
-  const folderId=String(d.folderId||'').trim();
-  if(folderId){try{const destination=DriveApp.getFolderById(folderId);if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(destination.getSharingAccess()))throw Error('The PDF destination folder must use restricted sharing.')}catch(e){if(String(e.message||e).includes('restricted'))throw e;throw Error('The destination folder ID is invalid or inaccessible.')}}
-  sheet.appendRow([code,type,fileId,file.getName(),folderId||'',true,new Date().toISOString()]);
+  const activeRows=onlineRead_(sheet);
+  activeRows.forEach((row,index)=>{if(String(row[5]).toUpperCase()!=='FALSE')sheet.getRange(index+2,6).setValue(false)});
+  sheet.appendRow([code,type,fileId,file.getName(),' ',true,new Date().toISOString(),naming]);
   SpreadsheetApp.flush();
-  return {ok:true,template:{code,type,name:file.getName(),fileId}};
+  return {ok:true,template:{code,type,name:file.getName(),label,namingConvention:naming,fileId}};
 }
 
 function onlinePdfStatuses_(d,data) {
   const tickets=Array.isArray(d.tickets)?d.tickets.slice(0,100):[];
   const answers=data.getSheetByName('ONLINE_APPLICATIONS'),log=data.getSheetByName(ONLINE_PDF_LOG_SHEET),templates=onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET));
-  const history=onlineRead_(log),latest=new Map();
-  history.forEach(row=>latest.set(String(row[0]),row));
   const result={};
   for(const ticket of tickets){
     const id=String(ticket?.ticketId||''),queueNo=String(ticket?.queueNo||''),transaction=String(ticket?.transaction||'').toUpperCase();
     if(!/^[a-f0-9-]{36}$/i.test(id)||!new RegExp('^(?:OL)?'+transaction+'[-_]').test(queueNo)||!['NH','RH'].includes(transaction))continue;
-    const generated=latest.get(id);
+    const logged=onlineFindHeaderRow_(log,'Ticket ID',id),generated=logged?.row;
     if(generated&&String(generated[8]).toLowerCase()==='generated'){
       result[id]={status:'Generated',url:String(generated[6]||''),templateCode:String(generated[3]||''),available:false};continue;
     }
@@ -409,7 +410,7 @@ function onlineGeneratePdfs_(d,props,data) {
   if(!tickets.length)throw Error('Select one to ten completed New Hire or Rehire records.');
   const queue=data.getSheetByName(CFG.queue),answers=data.getSheetByName('ONLINE_APPLICATIONS'),templates=onlinePdfTemplateRows_(data.getSheetByName(ONLINE_PDF_TEMPLATES_SHEET)),log=data.getSheetByName(ONLINE_PDF_LOG_SHEET);
   const answerHeaders=answers.getRange(1,1,1,answers.getLastColumn()).getDisplayValues()[0].map(value=>String(value||'').trim());
-  const queueColumn=answerHeaders.indexOf('Queue Number'),appRefColumn=answerHeaders.indexOf('Applicant Reference No.');
+  const appRefColumn=answerHeaders.indexOf('Applicant Reference No.');
   const generated=[];
   for(const ticket of tickets){
     const id=String(ticket?.ticketId||''),queueNo=String(ticket?.queueNo||''),transaction=String(ticket?.transaction||'').toUpperCase();
@@ -422,16 +423,21 @@ function onlineGeneratePdfs_(d,props,data) {
     if(!answer)throw Error('No ONLINE_APPLICATIONS form data was found for '+queueNo+'.');
     const template=onlinePdfTemplateFor_(templates,transaction);
     if(!template)throw Error('No active PDF template is configured for '+transaction+'.');
-    const outputFolderId=template.folderId||props.getProperty('ONLINE_PDF_FOLDER');
-    const folder=DriveApp.getFolderById(outputFolderId);
-    const name=String(answer.row[answerHeaders.indexOf('Applicant Name')]||queueNo).replace(/[\\/:*?"<>|#]+/g,' ').slice(0,90);
-    const working=DriveApp.getFileById(template.fileId).makeCopy('TIPON-TEMP-'+queueNo+'-'+Date.now(),folder);
+    const root=DriveApp.getFolderById(ONLINE_PDF_ROOT_FOLDER_ID);
+    const name=String(answer.row[answerHeaders.indexOf('Applicant Name')]||queueNo).replace(/[\\/:*?"<>|#]+/g,' ').replace(/\s+/g,' ').trim().slice(0,90)||queueNo;
+    let applicantFolderIterator=root.getFoldersByName(name),folder=applicantFolderIterator.hasNext()?applicantFolderIterator.next():root.createFolder(name);
+    if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(folder.getSharingAccess()))throw Error('Applicant PDF folders must use restricted sharing.');
+    const privateFolderId=props.getProperty('ONLINE_FOLDER');
+    const working=DriveApp.getFileById(template.fileId).makeCopy('TIPON-TEMP-'+queueNo+'-'+Date.now(),privateFolderId?DriveApp.getFolderById(privateFolderId):root);
     let pdfFile;
     try{
       const profile={};answerHeaders.forEach((header,i)=>{profile[header]=String(answer.row[i]||'')});
       profile['Queue Number']=queueNo;profile['Applicant Reference No.']=appRefColumn>=0?String(answer.row[appRefColumn]||''):'';
       onlineReplaceTemplate_(working.getId(),profile);
-      pdfFile=folder.createFile(working.getAs(MimeType.PDF).setName('TIPON-'+queueNo+'-'+name+'.pdf'));
+      const convention=String(template.namingConvention||'{{Applicant Name}} - {{Queue Number}} - Pre-employment Requirements');
+      let pdfName=convention.replace(/\{\{\s*([^{}]+?)\s*\}\}/g,(_,key)=>String(profile[key]||''));
+      pdfName=pdfName.replace(/[\\/:*?"<>|#]+/g,' ').replace(/\s+/g,' ').trim().replace(/\.pdf$/i,'').slice(0,140)||name+' - '+queueNo+' - Pre-employment Requirements';
+      pdfFile=folder.createFile(working.getAs(MimeType.PDF).setName(pdfName+'.pdf'));
     }catch(error){working.setTrashed(true);throw error}
     working.setTrashed(true);
     const stamp=new Date().toISOString(),ref=appRefColumn>=0?String(answer.row[appRefColumn]||''):'';

@@ -1597,4 +1597,8 @@ header.site-header::before{
 .pdf-select-cell input{cursor:pointer}
 .pdf-select-cell input:disabled{cursor:not-allowed;opacity:.45}
 #completedPdfStatus{min-height:20px;margin:8px 0}
+.pdf-template-fields{grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+#pdfTemplateFile{min-width:0}
+@media(max-width:900px){.pdf-template-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.pdf-template-fields{grid-template-columns:1fr}}
 @media(max-width:700px){.completed-toolbar{align-items:stretch}.completed-toolbar .field{min-width:100%}.completed-toolbar>.btn{width:100%}}

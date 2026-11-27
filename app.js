@@ -533,7 +533,7 @@ async function loadPdfTemplates(force=false){
 }
 function renderPdfTemplates(){
  const host=$('pdfTemplateRows');if(!host)return;
- host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.type)+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'">Deactivate</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No PDF templates configured.</td></tr>';
+ host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.namingConvention||'—')+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'">Deactivate</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No Word template configured.</td></tr>';
  host.querySelectorAll('[data-pdf-delete]').forEach(button=>button.onclick=async()=>{
   button.disabled=true;button.textContent='Updating…';
   try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete});pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deactivated.'}
@@ -542,19 +542,18 @@ function renderPdfTemplates(){
 }
 function bindPdfTemplateControls(){
  const save=$('savePdfTemplate');if(!save||save.dataset.bound)return;save.dataset.bound='1';
- $('refreshPdfTemplates').onclick=()=>void loadPdfTemplates(true);
  save.onclick=async()=>{
-  const file=$('pdfTemplateFile').files?.[0],code=$('pdfTemplateCode').value.trim(),templateType=$('pdfTemplateType').value,templateId=$('pdfTemplateDocId').value.trim(),folderId=$('pdfTemplateFolder').value.trim();
-  if(!code||(!file&&!templateId)){ $('pdfTemplateSetupStatus').textContent='Enter a template code and provide a Google Docs template or Word file.';return }
-  save.disabled=true;save.textContent='Saving…';$('pdfTemplateSetupStatus').textContent=file?'Uploading and converting the Word template…':'Saving template…';
+  const file=$('pdfTemplateFile').files?.[0],code=$('pdfTemplateCode').value.trim(),namingConvention=$('pdfTemplateNaming').value.trim();
+  if(!code||!namingConvention||!file){ $('pdfTemplateSetupStatus').textContent='Enter the pre-employment requirements and naming convention, then choose a Word template.';return }
+  save.disabled=true;save.textContent='Adding…';$('pdfTemplateSetupStatus').textContent='Uploading and preparing the Word template…';
   try{
-   const payload={code,templateType,templateId,folderId,filename:file?.name||'TIPON recruitment template'};
+   const payload={code,namingConvention,templateType:'BOTH',filename:file.name};
    if(file){const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(Error('Could not read the selected Word file.'));reader.readAsDataURL(file)});payload.fileData=dataUrl.split(',')[1];payload.fileMime=file.type||(/\.docx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'application/msword')}
    const result=await window.onlineRequest('savePdfTemplate',payload);
-   $('pdfTemplateCode').value='';$('pdfTemplateDocId').value='';$('pdfTemplateFolder').value='';$('pdfTemplateFile').value='';
+   $('pdfTemplateCode').value='';$('pdfTemplateNaming').value='';$('pdfTemplateFile').value='';
    pdfTemplatesLoadedAt=0;await loadPdfTemplates(true);$('pdfTemplateSetupStatus').textContent='Template '+result.template.code+' saved.';
   }catch(error){$('pdfTemplateSetupStatus').textContent=String(error?.message||error||'Unable to save the template.')}
-  finally{save.disabled=false;save.textContent='Add PDF Template'}
+  finally{save.disabled=false;save.textContent='Add Template'}
  };
 }
 function updateWindowAssignmentDropdown(){

@@ -25,8 +25,10 @@ function setupOnlinePdfGeneration(){
   onlineAnswersSheet_(props);
   if(!props.getProperty('ONLINE_FOLDER'))props.setProperty('ONLINE_FOLDER',DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
   onlineEnsurePdfInfrastructure_(props,data);
+  const pdfRoot=DriveApp.getFolderById(ONLINE_PDF_ROOT_FOLDER_ID);
+  if([DriveApp.Access.ANYONE,DriveApp.Access.ANYONE_WITH_LINK].includes(pdfRoot.getSharingAccess()))throw Error('The configured PDF root folder must use restricted sharing.');
   const fields=onlineFields_();
-  return {ok:true,templatesSheet:'PDF_TEMPLATES',logSheet:'PDF_GENERATION',formFields:fields.filter(field=>field.id).length};
+  return {ok:true,templatesSheet:'PDF_TEMPLATES',logSheet:'PDF_GENERATION',pdfRootFolder:pdfRoot.getName(),formFields:fields.filter(field=>field.id).length};
 }
 function migrateQueueSchema_(ss){
   const q=ss.getSheetByName(CFG.queue)||ss.insertSheet(CFG.queue),w=ss.getSheetByName(CFG.windows)||ss.insertSheet(CFG.windows);

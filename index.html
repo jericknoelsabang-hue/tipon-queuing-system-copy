@@ -128,20 +128,17 @@
       </div>
     </div>
     <div class="card" id="pdfTemplateSetup">
-      <div class="split"><div><h2>PDF Generation</h2><p>Add a Google Docs template or upload a Word template. Completed New Hire and Rehire records can use these templates to create PDFs in Google Drive.</p></div><button id="refreshPdfTemplates" class="btn ghost" type="button">Refresh templates</button></div>
-      <p class="setup-guide"><b>Template placeholders:</b> In your document, add tokens such as <code>{{Applicant Name}}</code>, <code>{{Queue Number}}</code>, or <code>{{First Name}}</code>. Tokens match the column headers in <code>ONLINE_APPLICATIONS</code>. One active template per transaction type is supported.</p>
+      <div class="split"><div><h2>PDF Generation</h2><p>Upload a Word template for completed New Hire and Rehire applicants. Generated PDFs are saved in each applicant’s folder in Google Drive.</p></div></div>
       <div class="inline-editor" id="pdfTemplateEditor">
-        <div class="grid">
-          <label class="field" for="pdfTemplateCode">Template Code<input id="pdfTemplateCode" maxlength="24" placeholder="e.g. NH-APPLICATION" autocomplete="off"></label>
-          <label class="field" for="pdfTemplateType">Template Type<select id="pdfTemplateType"><option value="NH">New Hire (NH)</option><option value="RH">Rehire (RH)</option><option value="BOTH">Both (NH and RH)</option></select></label>
-          <label class="field" for="pdfTemplateDocId">Google Docs template link or ID<input id="pdfTemplateDocId" placeholder="Paste the Google Docs template link or file ID"></label>
-          <label class="field" for="pdfTemplateFile">Or upload a Word template (.doc/.docx)<input id="pdfTemplateFile" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
-          <label class="field" for="pdfTemplateFolder">Optional destination folder ID<input id="pdfTemplateFolder" placeholder="Leave blank to use the private TIPON PDF folder"></label>
+        <div class="grid pdf-template-fields">
+          <label class="field" for="pdfTemplateCode">Pre-employment Requirements<input id="pdfTemplateCode" maxlength="80" placeholder="e.g. Pre-employment Requirements" autocomplete="off"></label>
+          <label class="field" for="pdfTemplateNaming">Naming Convention<input id="pdfTemplateNaming" maxlength="160" placeholder="e.g. {{Applicant Name}} - {{Queue Number}}" autocomplete="off"></label>
+          <label class="field" for="pdfTemplateFile">Upload a Word template (.doc/.docx)<input id="pdfTemplateFile" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
         </div>
-        <div class="buttons"><button id="savePdfTemplate" class="btn success" type="button">Add PDF Template</button></div>
+        <div class="buttons"><button id="savePdfTemplate" class="btn success" type="button">Add Template</button></div>
       </div>
       <p id="pdfTemplateSetupStatus" class="small-muted" role="status" aria-live="polite"></p>
-      <div class="table-wrap"><table><thead><tr><th>Template Code</th><th>Template Type</th><th>Template</th><th>Actions</th></tr></thead><tbody id="pdfTemplateRows"><tr><td colspan="4" class="empty">Loading PDF templates…</td></tr></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Pre-employment Requirements</th><th>Naming Convention</th><th>Word Template</th><th>Actions</th></tr></thead><tbody id="pdfTemplateRows"><tr><td colspan="4" class="empty">Loading PDF templates…</td></tr></tbody></table></div>
     </div>
     <div class="card"><h2>TV Announcement</h2><p>Editable message synchronized to the TV display through Google Sheets.</p>
       <label class="field" for="announcementInput">Announcement message<textarea id="announcementInput" maxlength="2500" rows="5" placeholder="Type the announcement"></textarea></label>
