@@ -20,6 +20,7 @@ p{color:#58798b}
 button,.button{font:inherit;border:1px solid #bed8e7;border-radius:8px;padding:8px 11px;background:#0879a4;color:#fff;font-weight:750;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 button.secondary,.button.secondary{background:#fff;color:#075477}
 button.success{background:#16885e;border-color:#16885e}
+button.onsite{background:#075477;border-color:#075477}
 button:disabled{opacity:.5;cursor:not-allowed}
 a{color:#075477}
 .table-wrap{overflow:auto}
@@ -54,8 +55,8 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
   <p id="status" role="status" aria-live="polite">Connecting to TIPON Workspace…</p>
   <section class="card">
     <div class="table-wrap"><table>
-      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Requirements</th></tr></thead>
-      <tbody id="listBody"><tr><td colspan="6" class="muted">Loading applications…</td></tr></tbody>
+      <thead><tr><th>Submitted</th><th>Queue Number</th><th>Applicant</th><th>Transaction</th><th>Appointment</th><th>Requirements</th><th>Action</th></tr></thead>
+      <tbody id="listBody"><tr><td colspan="7" class="muted">Loading applications…</td></tr></tbody>
     </table></div>
   </section>
 </main>
@@ -113,9 +114,9 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
        '<td>'+esc(row.transaction==='NH'?'New Hire':row.transaction==='RH'?'Rehire':row.transaction||'—')+'</td>'+
        '<td>'+esc(appointment(row.appointment))+'</td>'+
        '<td><button class="secondary" type="button" data-requirements="'+esc(row.id)+'" '+(files.length?'':'disabled')+'>View</button><span class="file-count">'+files.length+' file(s)</span></td>'+
-       
+       '<td><button class="onsite" type="button" data-onsite="'+esc(row.id)+'" '+(['Booked','Arrived'].includes(row.stage)&&!row.onsiteDone?'':'disabled')+'>'+(row.onsiteDone?'Checked in':'Onsite')+'</button></td>'+
        '</tr>';
-   }).join(''):'<tr><td colspan="6" class="muted">No online applications yet.</td></tr>';
+   }).join(''):'<tr><td colspan="7" class="muted">No online applications yet.</td></tr>';
  }
  async function loadList(silent=false){
    if(loading)return;
@@ -147,13 +148,23 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
    try{
      const result=await api('complete',{id});
      if(result&&result.ok===false)throw Error(result.error||'Application could not be completed.');
-     const row=applications.find(item=>item.id===id);
-     if(row)row.stage='Ready to book';
-     renderList();
+     await loadList(true);
      setStatus('Application review completed. Applicant may now book an appointment.');
    }catch(error){
      if(button){button.disabled=false;button.textContent='Complete'}
      setStatus('Unable to complete application: '+String(error?.message||error));
+   }
+ }
+ async function onsiteCheckIn(id,button){
+   if(button){button.disabled=true;button.textContent='Checking in…'}
+   try{
+     const result=await api('onsiteCheckIn',{id});
+     if(result&&result.ok===false)throw Error(result.error||'Applicant could not be checked in.');
+     await loadList(true);
+     setStatus('Applicant checked in. Queue number moved to Done Pre-check.');
+   }catch(error){
+     if(button){button.disabled=false;button.textContent='Onsite'}
+     setStatus('Unable to check in applicant: '+String(error?.message||error));
    }
  }
  function openRequirements(id){
@@ -195,7 +206,9 @@ button.danger{background:#fff1ef;border-color:#e4b8b4;color:#962f2a}button.dange
    const requirementsButton=event.target.closest('[data-requirements]');
    const messageButton=event.target.closest('[data-message]');
    const deleteButton=event.target.closest('[data-delete]');
+   const onsiteButton=event.target.closest('[data-onsite]');
    if(completeButton){void complete(completeButton.dataset.complete,completeButton);return}
+   if(onsiteButton){void onsiteCheckIn(onsiteButton.dataset.onsite,onsiteButton);return}
    if(requirementsButton){openRequirements(requirementsButton.dataset.requirements);return}
    if(messageButton){openMessage(messageButton.dataset.message,messageButton.dataset.name);return}
    if(deleteButton){void deleteApplication(deleteButton.dataset.delete,deleteButton);return}

@@ -481,9 +481,9 @@ function onlineQueueView_(params) {
 function onlineQueue(action, input) {
   const d=input||{};
   if (action==='fields') return onlineFields_();
-  const staffActions=['list','complete','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'];
+  const staffActions=['list','complete','onsiteCheckIn','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs'];
   const staff=staffActions.includes(action)?onlineStaff_():'';
-  const mutations=['submit','upload','complete','book','arrive','confirmArrival','saveTiponForm','sendMessage','sendApplicantMessage','savePdfTemplate','deletePdfTemplate','generatePdfs'];
+  const mutations=['submit','upload','complete','onsiteCheckIn','book','arrive','confirmArrival','saveTiponForm','sendMessage','sendApplicantMessage','savePdfTemplate','deletePdfTemplate','generatePdfs'];
   const lock=mutations.includes(action)?LockService.getScriptLock():null;
   if(lock) lock.waitLock(20000);
   try { return onlineOperate_(action,d,staff); }
@@ -518,9 +518,17 @@ function onlineOperate_(action,d,staff) {
   if(action==='getTiponForm')return onlineGetTiponForm_(d,all,answersSheet);
   if(action==='saveTiponForm')return onlineSaveTiponForm_(props,d,apps,answersSheet);
   if(action==='list') {
-    const docs=onlineRead_(files);
+    const docs=onlineRead_(files),queue=data.getSheetByName(CFG.queue),checkedIn=new Set();
+    if(queue&&queue.getLastRow()>1){
+      const lastRow=queue.getLastRow(),dateCells=queue.getRange(2,2,lastRow-1,1).getValues();
+      const firstToday=dateCells.findIndex(cell=>dayCell_(cell[0])===today);
+      if(firstToday>=0){
+        const queueRows=queue.getRange(firstToday+2,1,lastRow-firstToday-1,18).getDisplayValues();
+        queueRows.forEach(queueRow=>{if(String(queueRow[16]||'').trim().toUpperCase()==='YES')checkedIn.add(String(queueRow[0]||''))});
+      }
+    }
     return all.filter(row=>!row._deleted&&row[6]!=='Deleted').slice().reverse().map(row=>({id:row[0],date:row[2],transaction:row[3],name:row[4],stage:row[6],
-      appointment:row[7],number:row[9],files:docs.filter(file=>file[0]===row[0]).map(file=>({name:file[2],id:file[1]}))}));
+      appointment:row[7],number:row[9],onsiteDone:checkedIn.has(String(row[0])),files:docs.filter(file=>file[0]===row[0]).map(file=>({name:file[2],id:file[1]}))}));
   }
   if(action==='submit'){
     if(!['NH','RH'].includes(d.transaction)) throw Error('Choose New Hire or Rehire.');
@@ -622,6 +630,36 @@ function onlineOperate_(action,d,staff) {
     const number='OL'+row[3]+'-'+String(sequence).padStart(6,'0');
     update('Booked',appointment,sequence,number);
     return {number,appointment};
+  } else if(action==='onsiteCheckIn'){
+    if(!staff)throw Error('Only authorized recruiters can check in applicants.');
+    if(!['Booked','Arrived'].includes(stage))throw Error('The recruiter can check in only an applicant with a booked appointment.');
+    const ss=ss_(),active=ss.getSheetByName(CFG.queue),tx=findTx_(ss,row[3]);
+    if(!active)throw Error('The TIPON TAWAG queue sheet is unavailable.');
+    if(!tx)throw Error('This transaction is not active in the office queue.');
+    if(stage==='Booked'&&String(row[7]||'').slice(0,10)!==today)throw Error('Check in the applicant on the scheduled appointment date.');
+    const last=active.getLastRow(),match=last>1?active.getRange(2,1,last-1,1).createTextFinder(id).matchEntireCell(true).findNext():null;
+    let queueRow,existing,needsPrecheck=true;
+    if(match){
+      queueRow=match.getRow();existing=active.getRange(queueRow,1,1,20).getValues()[0];
+      if(dayCell_(existing[1])!==today)throw Error('This queue entry belongs to a different date.');
+      const status=String(existing[8]||'');
+      if(status==='WAITING')needsPrecheck=String(existing[16]||'').toUpperCase()!=='YES';
+      else if(['SERVING','COMPLETED'].includes(status))needsPrecheck=false;
+      else throw Error('The applicant queue entry is in an unexpected state. Refresh and try again.');
+    }else{
+      if(String(row[7]||'').slice(0,10)!==today)throw Error('Check in on the scheduled appointment date.');
+      const entry=[id,today,now,row[9],row[3],tx.name,"'"+row[4],"Online recruitment",'WAITING','','','','','','','','','','',''];
+      active.appendRow(entry);queueRow=active.getLastRow();
+    }
+    // Mirror the appointment status first. If that fails, the queue row stays unmarked and can be retried.
+    if(stage!=='Arrived')update('Arrived');
+    if(needsPrecheck){
+      active.getRange(queueRow,17,1,2).setValues([['YES',staff]]);
+      const queued=active.getRange(queueRow,1,1,20).getValues()[0];
+      try{logEvent_(ss,queued,'ONLINE ONSITE CHECK-IN',now,'','',staff,'')}catch(logError){Logger.log('Queue history logging failed: '+logError)}
+    }
+    CacheService.getScriptCache().removeAll(['TIPON_STATE_display','TIPON_STATE_staff','TIPON_STATE_setup']);
+    return {ok:true,number:row[9]};
   } else if(action==='arrive'||action==='confirmArrival'){
     if(stage==='Arrived')return {number:row[9]};
     if(stage!=='Booked'||row[7].slice(0,10)!==today)throw Error('Check in on your scheduled appointment date.');
@@ -661,7 +699,7 @@ function onlineBridge_(channel, staff) {
   if(!/^[a-f0-9-]{36}$/.test(channel))throw Error('Invalid Online Queue connection.');
   const html=`<!doctype html><meta charset="utf-8"><title>TIPON Online Queue data connection</title><script>
     const channel=${JSON.stringify(channel)}, origin='https://jericknoelsabang-hue.github.io';
-    const allowed=${JSON.stringify(staff?['list','complete','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
+    const allowed=${JSON.stringify(staff?['list','complete','onsiteCheckIn','deleteApplication','getTiponForm','tiponFormStatus','saveTiponForm','readStaff','onsiteLink','download','sendMessage','listPdfTemplates','savePdfTemplate','deletePdfTemplate','getPdfStatuses','generatePdfs']:['fields','submit','read','upload','book','arrive','confirmArrival','sendApplicantMessage'])};
     const pages=window.top!==window?window.top:window.opener;
     if(pages){
       window.addEventListener('message',event=>{
