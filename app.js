@@ -787,11 +787,17 @@ function tiponStatus(message,error=false){const el=$('tiponFormStatus');if(!el)r
 function arrangeTiponFields(host) {
  const byTitle=new Map(Array.from(host.querySelectorAll('[data-tipon-title]'),el=>[el.dataset.tiponTitle,el]));
  const parts=['House No. / Street / Subdivision','Barangay','Municipality / City','Province'];
- const groups=[['Last Name','First Name','Middle Name','Suffix'],['Date of Birth','Place of Birth (City/Province)','Nationality'],['Gender','Civil Status','Religion'],['Blood Type','Height (cm)','Weight (kg)'],...['Present','Permanent'].flatMap(prefix=>[parts.slice(0,2),parts.slice(2)].map(pair=>pair.map(x=>prefix+' '+x))),['Mobile Number','Email / Gmail Address'],['SSS No.','PhilHealth No.'],['Pag-IBIG No.','TIN']];
+ const groups=[['Last Name','First Name','Middle Name','Suffix'],['Date of Birth','Place of Birth (City/Province)','Nationality'],['Gender','Civil Status','Religion'],['Blood Type','Height (cm)','Weight (kg)'],...['Present','Permanent'].flatMap(prefix=>[parts.slice(0,2),parts.slice(2)].map(pair=>pair.map(x=>prefix+' '+x))),['Mobile Number','Email / Gmail Address'],['SSS No.','PhilHealth No.'],['Pag-IBIG No.','TIN'],
+  ["Father's Name\n(Last Name, First Name Middle Name)","Father's Mobile Number/ Email","Father's Address"],
+  ["Mother's Maiden Name\n(Last Name, First Name Middle Name)","Mother's  Mobile Number/ Email","Mother's Address"],
+  ["Spouse's Name\n(Last Name, First Name Middle Name)","Spouse's  Mobile Number/ Email","Spouse's Address"],
+  ["Emergency Contact Person\n(Last Name, First Name Middle Name)","Emergency Contact Relationship","Emergency Mobile Number"],
+  ["Emergency Contact Address"]];
  for(const titles of groups){
   const labels=titles.map(t=>byTitle.get(t)?.closest('.tipon-question')).filter(Boolean);
   if(!labels.length)continue;
   const row=document.createElement('div');row.className='tipon-field-row';row.style.setProperty('--count',labels.length);
+  if(titles[0]==='Emergency Contact Address')row.classList.add('tipon-emergency-address');
   labels[0].before(row);row.append(...labels);
  }
  const same=[...byTitle].find(([key])=>key.startsWith('Is your permanent address'))?.[1];
@@ -801,7 +807,7 @@ function arrangeTiponFields(host) {
   if(to.tagName==='SELECT'&&from.value&&![...to.options].some(o=>o.value===from.value))to.add(new Option(from.value,from.value));
   to.value=from.value;
  }};
- const refresh=()=>{for(const part of parts){const row=byTitle.get('Permanent '+part)?.closest('.tipon-field-row');if(row)row.hidden=Boolean(same&&!same.value)}sync()};
+ const refresh=()=>{for(const part of parts){const row=byTitle.get('Permanent '+part)?.closest('.tipon-field-row');if(row)row.hidden=!/^no\b/i.test(same?.value||'')}sync()};
  for(const prefix of ['Present','Permanent'])for(const [part,endpoint] of [['Province','provinces'],['Municipality / City','cities-municipalities'],['Barangay','barangays']]){
   const key=prefix+' '+part,old=byTitle.get(key);if(!old)continue;
   const select=document.createElement('select');select.dataset.tiponTitle=key;select.name=old.name;select.required=old.required;
