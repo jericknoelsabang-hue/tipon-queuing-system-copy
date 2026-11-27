@@ -13,6 +13,7 @@ let onlineApplications=[],onlineQueueLoading=false,onlineQueueLastLoaded=0,onlin
 const tiponFormSaved=new Map(),tiponFormChecks=new Set();
 const completedPdfStatus=new Map(),completedPdfSelection=new Set();
 let completedFilterDate='',completedFilterTransaction='',pdfStatusRequest='';
+let pdfTemplateRevision=0;
 let pdfTemplates=[],pdfTemplatesLoadedAt=0,pdfTemplatesLoadPromise=null;
 const queueBoards={};
 for(const [stage,prefix,emptyText] of [
@@ -527,10 +528,11 @@ async function loadPdfTemplates(force=false){
  if(typeof window.onlineRequest!=='function')return;
  if(!force&&Date.now()-pdfTemplatesLoadedAt<60000)return;
  if(pdfTemplatesLoadPromise)return pdfTemplatesLoadPromise;
+ const revision=pdfTemplateRevision;
  const host=$('pdfTemplateRows');if(host&&!pdfTemplates.length)host.innerHTML='<tr><td colspan="4" class="empty">Loading PDF templates…</td></tr>';
  pdfTemplatesLoadPromise=(async()=>{
-  try{pdfTemplates=await window.onlineRequest('listPdfTemplates',{});pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent=''}
-  catch(error){if(host&&!pdfTemplates.length){host.innerHTML='<tr><td colspan="4"><button type="button" class="btn sm">Retry loading templates</button></td></tr>';host.querySelector('button').onclick=()=>loadPdfTemplates(true)}const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
+  try{const templates=await window.onlineRequest('listPdfTemplates',{});if(revision!==pdfTemplateRevision)return;pdfTemplates=templates;pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent=''}
+  catch(error){if(revision!==pdfTemplateRevision)return;if(host&&!pdfTemplates.length){host.innerHTML='<tr><td colspan="4"><button type="button" class="btn sm">Retry loading templates</button></td></tr>';host.querySelector('button').onclick=()=>loadPdfTemplates(true)}const status=$('pdfTemplateSetupStatus');if(status)status.textContent='Unable to load templates: '+String(error?.message||error)}
   finally{pdfTemplatesLoadPromise=null}
  })();
  return pdfTemplatesLoadPromise;
@@ -540,7 +542,7 @@ function renderPdfTemplates(){
  host.innerHTML=pdfTemplates.length?pdfTemplates.map(item=>'<tr><td><b>'+esc(item.code)+'</b></td><td>'+esc(item.namingConvention||'—')+'</td><td>'+esc(item.name)+'</td><td><button class="btn sm danger" type="button" data-pdf-delete="'+esc(item.code)+'">Deactivate</button></td></tr>').join(''):'<tr><td colspan="4" class="empty">No Word template configured.</td></tr>';
  host.querySelectorAll('[data-pdf-delete]').forEach(button=>button.onclick=async()=>{
   button.disabled=true;button.textContent='Updating…';
-  try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete});pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deactivated.'}
+  try{await window.onlineRequest('deletePdfTemplate',{code:button.dataset.pdfDelete});pdfTemplateRevision++;pdfTemplates=pdfTemplates.filter(item=>item.code!==button.dataset.pdfDelete);pdfTemplatesLoadedAt=Date.now();renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template deactivated.'}
   catch(error){button.disabled=false;button.textContent='Deactivate';$('pdfTemplateSetupStatus').textContent=String(error?.message||error)}
  });
 }
@@ -555,7 +557,11 @@ function bindPdfTemplateControls(){
    if(file){const dataUrl=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(Error('Could not read the selected Word file.'));reader.readAsDataURL(file)});payload.fileData=dataUrl.split(',')[1];payload.fileMime=file.type||(/\.docx$/i.test(file.name)?'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'application/msword')}
    const result=await window.onlineRequest('savePdfTemplate',payload);
    $('pdfTemplateCode').value='';$('pdfTemplateNaming').value='';$('pdfTemplateFile').value='';
-   pdfTemplatesLoadedAt=0;await loadPdfTemplates(true);$('pdfTemplateSetupStatus').textContent='Template '+result.template.code+' saved.';
+   pdfTemplateRevision++;
+   const saved=result.template;
+   pdfTemplates=[...pdfTemplates.filter(item=>item.code!==saved.code),{...saved,name:saved.name||file.name,namingConvention:saved.namingConvention||namingConvention}];
+   if(pdfTemplatesLoadedAt)pdfTemplatesLoadedAt=Date.now();
+   renderPdfTemplates();$('pdfTemplateSetupStatus').textContent='Template '+result.template.code+' saved.';
   }catch(error){$('pdfTemplateSetupStatus').textContent=String(error?.message||error||'Unable to save the template.')}
   finally{save.disabled=false;save.textContent='Add Template'}
  };
