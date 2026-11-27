@@ -793,11 +793,28 @@ function arrangeTiponFields(host) {
   ["Spouse's Name\n(Last Name, First Name Middle Name)","Spouse's  Mobile Number/ Email","Spouse's Address"],
   ["Emergency Contact Person\n(Last Name, First Name Middle Name)","Emergency Contact Relationship","Emergency Mobile Number"],
   ["Emergency Contact Address"]];
+ groups.push(
+  ["Dependent 1 - Name\n(Last Name, First Name Middle Name)","Dependent 1 - Relationship","Dependent 1 - Date of Birth"],
+  ["Dependent 2 - Name\n(Last Name, First Name Middle Name)","Dependent 2 - Relationship","Dependent 2 - Date of Birth"],
+  ["Dependent 3 - Name\n(Last Name, First Name Middle Name)","Dependent 3 - Relationship","Dependent 3 - Date of Birth"],
+  ["Elementary - Name of School","Elementary - Address","Elementary - From","Elementary - To"],
+  ["High School - Name of School","High School - Address","High School - From","High School - To"],
+  ["College - Name of School","College - Address","College - From","College - To"],
+  ["Post Graduate / Vocational - Name of School","Post Graduate / Vocational - Address","Post Graduate / Vocational - From","Post Graduate / Vocational - To"],
+  ["Work 1 -  Address"],
+  ["Work 1 - Tel. No.","Work 1 -  From","Work 1 -  To"],
+  ["Work 2 - Address"],
+  ["Work 2 - Tel. No.","Work 2 - From","Work 2 - To"],
+  ["Work 3 - Address"],
+  ["Work 3 - Tel. No.","Work 3 - From","Work 3 - To"]
+ );
  for(const titles of groups){
   const labels=titles.map(t=>byTitle.get(t)?.closest('.tipon-question')).filter(Boolean);
   if(!labels.length)continue;
   const row=document.createElement('div');row.className='tipon-field-row';row.style.setProperty('--count',labels.length);
   if(titles[0]==='Emergency Contact Address')row.classList.add('tipon-emergency-address');
+  if(titles[0].endsWith(' - Name of School'))row.classList.add('tipon-school-row');
+  if(/^Work \d+ -\s+Address$/.test(titles[0]))row.classList.add('tipon-emergency-address');
   labels[0].before(row);row.append(...labels);
  }
  const same=[...byTitle].find(([key])=>key.startsWith('Is your permanent address'))?.[1];
@@ -925,7 +942,8 @@ function tiponBindDialog(){
  const revalidate=()=>{if(form.dataset.validationAttempted==='1')validateTiponForm(false)};
  form.addEventListener('input',revalidate);form.addEventListener('change',revalidate);
  $('tiponFormClose').onclick=$('tiponFormCancel').onclick=()=>dialog.close();
- $('clearTiponSignature').onclick=()=>{canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);tiponSignatureDirty=true;$('tiponSignatureSaved').textContent='Draw a new signature before saving.';if(form.dataset.validationAttempted==='1')validateTiponForm(false)};
+bindCaptureDevices(dialog,canvas);
+ $('clearTiponSignature').onclick=()=>{canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);tiponSignatureDirty=false;$('tiponSignatureSaved').textContent='Draw a new signature before saving.';if(form.dataset.validationAttempted==='1')validateTiponForm(false)};
  const point=e=>{const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height}};
  canvas.onpointerdown=e=>{tiponSignatureDrawing=true;canvas.setPointerCapture(e.pointerId);const p=point(e),ctx=canvas.getContext('2d');ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineWidth=4;ctx.lineCap='round';ctx.lineJoin='round';tiponSignatureDirty=true};
  canvas.onpointermove=e=>{if(tiponSignatureDrawing){const p=point(e),ctx=canvas.getContext('2d');ctx.lineTo(p.x,p.y);ctx.stroke()}};
@@ -1320,3 +1338,77 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('focus',pollOnResume);
 window.addEventListener('online',()=>{refreshFailures=0;pollOnResume()});
 })();
+
+function bindCaptureDevices(formDialog, canvas) {
+ const camera=$('tiponCamera'), video=camera.querySelector('video'), source=$('cameraSource');
+ let stream, generation=0, tablet, previous;
+ function stopCamera(){
+  generation++;
+  stream?.getTracks().forEach(track=>track.stop());
+  stream=null;
+  video.srcObject=null;
+ }
+ async function preview(id){
+  stopCamera();
+  const token=generation;
+  try {
+   const next=await navigator.mediaDevices.getUserMedia({video:id?{deviceId:{exact:id}}:true,audio:false});
+   if(token!==generation||!camera.open){next.getTracks().forEach(t=>t.stop());return}
+   stream=next;
+   video.srcObject=next;
+   const devices=await navigator.mediaDevices.enumerateDevices();
+   if(token!==generation)return;
+   source.replaceChildren(...devices.filter(d=>d.kind==='videoinput').map((d,i)=>new Option(d.label||'Camera '+(i+1),d.deviceId)));
+   source.value=next.getVideoTracks()[0].getSettings().deviceId;
+  }catch(err){if(token===generation){camera.close();tiponStatus('Unable to open camera. '+err.message,true)}}
+ }
+ $('openCamera').onclick=()=>{camera.showModal();preview()};
+ source.onchange=()=>preview(source.value);
+ $('closeCamera').onclick=()=>camera.close();
+ camera.addEventListener('close',stopCamera);
+ $('takePhoto').onclick=()=>{
+  if(!video.videoWidth||!stream)return;
+  const photo=document.createElement('canvas');
+  photo.width=Math.min(1024,video.videoWidth);
+  photo.height=Math.round(photo.width*video.videoHeight/video.videoWidth);
+  photo.getContext('2d').drawImage(video,0,0,photo.width,photo.height);
+  tiponPhotoData=photo.toDataURL('image/jpeg',0.82);
+  $('tiponPhotoPreview').src=tiponPhotoData;
+  $('tiponPhotoPreview').hidden=false;
+  $('tiponPhotoSaved').textContent='Photo captured.';
+  camera.close();
+ };
+ const button=$('connectStu');
+ function ink(event){
+  if(!formDialog.open||![1,0x34].includes(event.reportId)||event.data.byteLength<6)return;
+  if(!(event.data.getUint8(0)&2)){previous=null;return}
+  const x=event.data.getUint16(2)*canvas.width/10800,y=event.data.getUint16(4)*canvas.height/6480;
+  const ctx=canvas.getContext('2d');
+  ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();
+  ctx.moveTo(previous?.x??x-0.1,previous?.y??y);ctx.lineTo(x,y);ctx.stroke();
+  previous={x,y};tiponSignatureDirty=true;
+ }
+ async function release(){
+  const device=tablet;tablet=null;previous=null;
+  if(device){device.removeEventListener('inputreport',ink);
+   if(device.opened){try{await device.sendFeatureReport(0x20,new Uint8Array([0]))}catch{}try{await device.close()}catch{}}}
+  button.disabled=false;button.textContent='Connect to STU-540';
+ }
+ button.onclick=async()=>{
+  if(!navigator.hid){tiponStatus('Open the form in a browser with USB HID support.',true);return}
+  button.disabled=true;
+  try{
+   const [device]=await navigator.hid.requestDevice({filters:[{vendorId:0x056a,productId:0x00a8}]});
+   if(!device||!formDialog.open){button.disabled=false;return}
+   tablet=device;await device.open();
+   await device.sendFeatureReport(0x20,new Uint8Array([0]));
+   await device.sendFeatureReport(0x21,new Uint8Array([1]));
+   if(!formDialog.open){await release();return}
+   device.addEventListener('inputreport',ink);
+   button.textContent='STU-540 connected';
+  }catch(err){await release();tiponStatus('Unable to connect the STU-540. '+err.message,true)}
+ };
+ $('clearTiponSignature').addEventListener('click',()=>{previous=null;if(tablet?.opened)tablet.sendFeatureReport(0x20,new Uint8Array([0])).catch(()=>tiponStatus('Unable to clear the signature pad.',true))});
+ navigator.hid?.addEventListener('disconnect',e=>{if(e.device===tablet)release()});
+ formDialog.addEventListener('close',()=>{if(camera.open)camera.close();release()});
+}
