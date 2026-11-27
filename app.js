@@ -943,7 +943,15 @@ function arrangeTiponFields(host) {
   }
   controls.forEach(el=>el?.addEventListener('change',updateZip));updateZip();
  }
- same?.addEventListener('change',refresh);
+ same?.addEventListener('change',()=>{
+  if(/^no\b/i.test(same.value)){
+   for(const part of parts){
+    const field=byTitle.get('Permanent '+part);
+    if(field)field.value='';
+   }
+  }
+  refresh();
+ });
  for(const part of parts)byTitle.get('Present '+part)?.addEventListener('input',sync);
  refresh();
 }
