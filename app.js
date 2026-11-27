@@ -1337,7 +1337,6 @@ document.addEventListener('visibilitychange',()=>{
 });
 window.addEventListener('focus',pollOnResume);
 window.addEventListener('online',()=>{refreshFailures=0;pollOnResume()});
-})();
 
 function bindCaptureDevices(formDialog, canvas) {
  const camera=$('tiponCamera'), video=camera.querySelector('video'), source=$('cameraSource');
@@ -1412,3 +1411,4 @@ function bindCaptureDevices(formDialog, canvas) {
  navigator.hid?.addEventListener('disconnect',e=>{if(e.device===tablet)release()});
  formDialog.addEventListener('close',()=>{if(camera.open)camera.close();release()});
 }
+})();
