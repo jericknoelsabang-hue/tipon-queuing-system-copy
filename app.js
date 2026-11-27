@@ -887,6 +887,7 @@ async function openTiponForm(i){
  if(!connectionHealthy||typeof window.onlineRequest!=='function'){staffMessage('Connect to the Online Queue Apps Script before opening Tipon Form.','err');return}
  tiponFormWindow=Number(i);tiponFormTicket={...ticket};tiponFormBusy=true;
  const dialog=$('tiponFormDialog');if(!dialog){staffMessage('Tipon Form panel is missing. Refresh the page.','err');tiponFormBusy=false;return}
+ tiponBindDialog();
  $('tiponFormIdentity').textContent=(ticket.name||'Applicant')+' · '+(ticket.queueNo||'')+' · '+(ticket.transactionName||ticket.transaction||'');
  $('tiponFormFields').innerHTML='<p class="small-muted">Loading applicant information…</p>';$('tiponFormSave').disabled=true;$('tiponFormStatus').classList.add('hide');$('tiponPhotoFile').value='';$('tiponPhotoPreview').hidden=true;tiponPhotoData='';tiponSignatureDirty=false;
  const canvas=$('tiponSignaturePad');canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);$('tiponSignatureSaved').textContent='';
@@ -1299,7 +1300,6 @@ $('onlineQueueBody').addEventListener('click',event=>{
     window.open(detailUrl.href,'_blank','noopener');
   }
 });
-tiponBindDialog();
 const full=$('fullscreen');
 function reflect(){full.setAttribute('aria-pressed',document.fullscreenElement===$('display')?'true':'false')}
 full.onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('display').requestFullscreen()}catch(e){error(e,true)}};
