@@ -20,6 +20,14 @@ function setupTiponQueueSystem(){
   styleQueueSheets_(ss);
   return {ok:true,federationMode:true,queueHistory:true,version:'federation-v14'};
 }function headerIndex_(headers,name){return headers.findIndex(v=>String(v||'').trim().toLowerCase()===String(name).trim().toLowerCase())}
+function setupOnlinePdfGeneration(){
+  const props=PropertiesService.getScriptProperties(),data=ss_();
+  onlineAnswersSheet_(props);
+  if(!props.getProperty('ONLINE_FOLDER'))props.setProperty('ONLINE_FOLDER',DriveApp.createFolder('TIPON TAWAG Private Pre-Requirements').getId());
+  onlineEnsurePdfInfrastructure_(props,data);
+  const fields=onlineFields_();
+  return {ok:true,templatesSheet:'PDF_TEMPLATES',logSheet:'PDF_GENERATION',formFields:fields.filter(field=>field.id).length};
+}
 function migrateQueueSchema_(ss){
   const q=ss.getSheetByName(CFG.queue)||ss.insertSheet(CFG.queue),w=ss.getSheetByName(CFG.windows)||ss.insertSheet(CFG.windows);
   const historyWasMissing=!ss.getSheetByName('QUEUE_HISTORY');
