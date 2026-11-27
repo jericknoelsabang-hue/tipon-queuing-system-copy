@@ -1144,13 +1144,8 @@ $('openAddTx').onclick=()=>{
  const editor=$('txAddEditor'),isOpening=editor.classList.contains('hide');
  editor.classList.toggle('hide',!isOpening);
  $('openAddTx').setAttribute('aria-expanded',String(isOpening));
- $('openAddTx').textContent=isOpening?'Close':'Add Transaction Type';
+ $('openAddTx').textContent=isOpening?'Cancel':'Add Transaction Type';
  if(isOpening)$('newCode').focus();
-};
-$('cancelAddTx').onclick=()=>{
- $('txAddEditor').classList.add('hide');
- $('openAddTx').setAttribute('aria-expanded','false');
- $('openAddTx').textContent='Add Transaction Type';
 };
 $('addTx').onclick=async()=>{
   const code=$('newCode').value.trim().toUpperCase(),name=$('newName').value.trim();
