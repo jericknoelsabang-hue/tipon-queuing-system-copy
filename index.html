@@ -128,8 +128,8 @@
       </div>
     </div>
     <div class="card" id="pdfTemplateSetup">
-      <div class="split"><div><h2>PDF Generation</h2><p>Upload a Word template for completed New Hire and Rehire applicants. Generated PDFs are saved in each applicant’s folder in Google Drive.</p></div></div>
-      <div class="inline-editor" id="pdfTemplateEditor">
+      <div class="split"><div><h2>PDF Generation</h2><p>Upload a Word template for completed New Hire and Rehire applicants. Generated PDFs are saved in each applicant’s folder in Google Drive.</p></div><button id="togglePdfTemplate" class="btn success" type="button" aria-controls="pdfTemplateEditor" aria-expanded="false">Add Template</button></div>
+      <div id="pdfTemplateEditor" hidden><div class="inline-editor">
         <div class="grid pdf-template-fields">
           <label class="field" for="pdfTemplateCode">Pre-employment Requirements<input id="pdfTemplateCode" maxlength="80" placeholder="e.g. Pre-employment Requirements" autocomplete="off"></label>
           <label class="field" for="pdfTemplateNaming">Naming Convention<input id="pdfTemplateNaming" maxlength="160" type="text" placeholder="e.g. SSS_EMPLOYEENO" autocomplete="off"></label>
@@ -137,6 +137,16 @@
         </div>
         <div class="buttons"><button id="savePdfTemplate" class="btn success" type="button">Add Template</button></div>
       </div>
+      </div>
+      <script>
+        document.getElementById('togglePdfTemplate').addEventListener('click', function () {
+          const editor = document.getElementById('pdfTemplateEditor');
+          editor.hidden = !editor.hidden;
+          this.setAttribute('aria-expanded', String(!editor.hidden));
+          this.textContent = editor.hidden ? 'Add Template' : 'Close';
+          if (!editor.hidden) document.getElementById('pdfTemplateCode').focus();
+        });
+      </script>
       <p id="pdfTemplateSetupStatus" class="small-muted" role="status" aria-live="polite"></p>
       <div class="table-wrap"><table><thead><tr><th>Pre-employment Requirements</th><th>Naming Convention</th><th>Word Template</th><th>Actions</th></tr></thead><tbody id="pdfTemplateRows"><tr><td colspan="4" class="empty">Loading PDF templates…</td></tr></tbody></table></div>
     </div>
