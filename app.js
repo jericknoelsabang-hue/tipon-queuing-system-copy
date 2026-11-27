@@ -1144,11 +1144,13 @@ $('openAddTx').onclick=()=>{
  const editor=$('txAddEditor'),isOpening=editor.classList.contains('hide');
  editor.classList.toggle('hide',!isOpening);
  $('openAddTx').setAttribute('aria-expanded',String(isOpening));
+ $('openAddTx').textContent=isOpening?'Close':'Add Transaction Type';
  if(isOpening)$('newCode').focus();
 };
 $('cancelAddTx').onclick=()=>{
  $('txAddEditor').classList.add('hide');
  $('openAddTx').setAttribute('aria-expanded','false');
+ $('openAddTx').textContent='Add Transaction Type';
 };
 $('addTx').onclick=async()=>{
   const code=$('newCode').value.trim().toUpperCase(),name=$('newName').value.trim();
@@ -1165,9 +1167,10 @@ $('addTx').onclick=async()=>{
       $('newCode').value='';$('newName').value='';
       $('txAddEditor').classList.add('hide');
       $('openAddTx').setAttribute('aria-expanded','false');
+ $('openAddTx').textContent='Add Transaction Type';
       status('Transaction '+code+' saved.','ok');
     }
-  }finally{b.disabled=false;b.textContent='Save Transaction Type'}
+  }finally{b.disabled=false;b.textContent='Add Transaction Type'}
 };
 $('api').value=url();
 $('refresh').onclick=()=>refresh();
